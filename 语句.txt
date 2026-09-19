@@ -1,0 +1,123 @@
+CREATE TABLE `answer_record` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `exam_record_id` bigint NOT NULL COMMENT '考试记录ID',
+  `question_id` bigint NOT NULL COMMENT '试题ID',
+  `user_answer` text COMMENT '用户答案',
+  `score` int DEFAULT NULL COMMENT '得分',
+  `comment` text COMMENT '评语',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=101 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='答题记录表';
+
+CREATE TABLE `exam` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '考试ID',
+  `title` varchar(200) NOT NULL COMMENT '考试标题',
+  `description` text COMMENT '考试描述',
+  `user_group_ids` varchar(500) DEFAULT NULL,
+  `start_time` datetime NOT NULL COMMENT '开始时间',
+  `end_time` datetime NOT NULL COMMENT '结束时间',
+  `duration` int NOT NULL COMMENT '考试时长（分钟）',
+  `total_score` int NOT NULL DEFAULT '100' COMMENT '总分',
+  `creator_id` bigint NOT NULL COMMENT '创建者ID',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='考试表';
+
+CREATE TABLE `exam_question` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `exam_id` bigint NOT NULL COMMENT '考试ID',
+  `question_id` bigint NOT NULL COMMENT '试题ID',
+  `sort_order` int NOT NULL DEFAULT '0' COMMENT '排序',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `score` int DEFAULT '10' COMMENT '该题在考试中的分值',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=76 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='考试-试题关联表';
+
+CREATE TABLE `exam_record` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '记录ID',
+  `exam_id` bigint NOT NULL COMMENT '考试ID',
+  `user_id` bigint NOT NULL COMMENT '用户ID',
+  `start_time` datetime DEFAULT NULL COMMENT '开始答题时间',
+  `submit_time` datetime DEFAULT NULL COMMENT '提交时间',
+  `score` int DEFAULT NULL COMMENT '得分',
+  `status` tinyint NOT NULL DEFAULT '0' COMMENT '状态：0-未开始，1-进行中，2-已提交，3-已批阅',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=43 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='考试记录表';
+
+
+CREATE TABLE `knowledge_point` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '知识点ID',
+  `name` varchar(100) NOT NULL COMMENT '知识点名称',
+  `creator_id` bigint NOT NULL COMMENT '创建者ID',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_creator_id` (`creator_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识点表';
+
+
+CREATE TABLE `question` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '试题ID',
+  `type` tinyint NOT NULL COMMENT '题型：0-单选题，1-多选题，2-判断题，3-填空题，4-简答题',
+  `content` text NOT NULL COMMENT '题目内容',
+  `options` text COMMENT '选项（JSON格式）',
+  `answer` text NOT NULL COMMENT '答案',
+  `analysis` text COMMENT '解析',
+  `knowledge_point_id` bigint DEFAULT NULL COMMENT '所属知识点ID',
+  `creator_id` bigint NOT NULL COMMENT '创建者ID',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=80 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='试题表';
+
+CREATE TABLE `user` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '用户ID',
+  `username` varchar(50) NOT NULL COMMENT '用户名',
+  `password` varchar(255) NOT NULL COMMENT '密码',
+  `real_name` varchar(50) DEFAULT NULL COMMENT '真实姓名',
+  `role` tinyint NOT NULL DEFAULT '1' COMMENT '角色：0-管理员，1-学生',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `phone` varchar(255) DEFAULT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `username` (`username`)
+) ENGINE=InnoDB AUTO_INCREMENT=26 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户表';
+
+CREATE TABLE `user_group` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '用户组ID',
+  `name` varchar(100) NOT NULL COMMENT '用户组名称',
+  `description` text COMMENT '用户组描述',
+  `creator_id` bigint NOT NULL COMMENT '创建者ID',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `share_code` varchar(20) NOT NULL COMMENT '分享码',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户组表';
+
+CREATE TABLE `user_group_member` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'ID',
+  `user_group_id` bigint NOT NULL COMMENT '用户组ID',
+  `user_id` bigint NOT NULL COMMENT '用户ID',
+  `join_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_group_user` (`user_group_id`,`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户组成员表';
+
+CREATE TABLE `announcement` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '公告ID',
+  `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '公告标题',
+  `content` text COLLATE utf8mb4_unicode_ci COMMENT '公告内容',
+  `type` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT '公告' COMMENT '公告类型（系统通知、考试通知、公告等）',
+  `target_roles` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '目标角色（0-管理员，1-学生，2-教师，多个角色用逗号分隔）',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_create_time` (`create_time`)
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='公告表';

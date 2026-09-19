@@ -1,0 +1,13 @@
+target/
+*.class
+*.jar
+*.war
+.idea/
+*.iml
+.vscode/
+*.log
+*.mp4
+*.avi
+*.zip
+*.rar
+node_modules/

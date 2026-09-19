@@ -1,0 +1,1 @@
+import{r}from"./request-MMQ9H4tB.js";const t=e=>r.get("/api/user",{params:e}),a=e=>r.get(`/api/user/${e}`),u=e=>r.post("/api/user",e),n=e=>r.put("/api/user",e),p=e=>r.delete(`/api/user/${e}`);export{t as a,u as c,p as d,a as g,n as u};

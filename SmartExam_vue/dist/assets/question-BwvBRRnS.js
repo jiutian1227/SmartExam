@@ -1,0 +1,1 @@
+import{r as t}from"./request-MMQ9H4tB.js";const n=e=>t.get("/api/question",{params:e}),o=e=>t.post("/api/question",e),i=e=>t.put("/api/question",e),u=e=>t.delete(`/api/question/${e}`),a=e=>t.post("/api/question/ai-generate",e);export{a,o as c,u as d,n as g,i as u};
