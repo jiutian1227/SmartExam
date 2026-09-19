@@ -5,7 +5,7 @@
 ## 项目文档
 具体项目见报告书
 
-完整的课程设计报告书见：[SmartExam_Report.docx](docs/SmartExam_Report.docx)
+完整的课程设计报告书见：[系统报告书.docx](docs/系统报告书.docx)
 
 报告书包含需求分析、概要设计、详细设计、数据库设计、系统实现、系统测试等完整内容。
 
