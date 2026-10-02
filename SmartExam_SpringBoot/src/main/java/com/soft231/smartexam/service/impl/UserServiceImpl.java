@@ -8,6 +8,7 @@ import com.soft231.smartexam.util.BCryptUtil;
 import com.soft231.smartexam.util.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -22,6 +23,94 @@ import java.util.Map;
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Autowired
+    private com.soft231.smartexam.service.CaptchaService captchaService;
+
+    /** 连续登录失败达到该次数后锁定账号 */
+    private static final int MAX_FAIL_COUNT = 5;
+    /** 锁定持续时间：5分钟 */
+    private static final long LOCK_DURATION_MILLIS = 5 * 60 * 1000L;
+
+    /** 登录失败计数（单机内存实现，多实例部署需改为Redis） */
+    private final java.util.Map<String, LoginAttempt> loginAttempts = new java.util.concurrent.ConcurrentHashMap<>();
+
+    //用户登录：先检查锁定，再消费验证码凭证，最后校验密码
+    @Override
+    public Map<String, Object> login(String username, String password, String captchaToken) {
+        pruneLoginAttempts();
+
+        // 1. 账号锁定检查
+        LoginAttempt attempt = loginAttempts.get(username);
+        if (attempt != null && attempt.lockedUntil > System.currentTimeMillis()) {
+            long seconds = (attempt.lockedUntil - System.currentTimeMillis()) / 1000;
+            throw new IllegalArgumentException("登录失败次数过多，请在 " + seconds + " 秒后重试");
+        }
+
+        // 2. 验证码凭证校验（一次性，防止绕过滑块直接爆破密码）
+        if (!captchaService.consume(captchaToken)) {
+            throw new IllegalArgumentException("验证码无效或已过期，请重新完成验证");
+        }
+
+        // 3. 密码校验
+        User existingUser = this.lambdaQuery()
+                .eq(User::getUsername, username)
+                .one();
+
+        boolean matched = existingUser != null
+                && existingUser.getPassword() != null
+                && BCryptUtil.matches(password, existingUser.getPassword());
+
+        if (!matched) {
+            // 用户不存在与密码错误返回同一提示，避免暴露用户名是否存在
+            throw new IllegalArgumentException(recordFailure(username));
+        }
+
+        loginAttempts.remove(username);
+
+        Map<String, Object> result = new HashMap<>();
+        // token 只带身份标识，角色由拦截器每次回查数据库，保证改权限后旧 token 立即失效
+        result.put("token", jwtUtil.generateToken(existingUser.getId(), existingUser.getUsername()));
+        // 不将密码哈希返回给前端
+        existingUser.setPassword(null);
+        result.put("user", existingUser);
+        return result;
+    }
+
+    /**
+     * 记录一次登录失败，达到阈值则锁定账号
+     * @return 给前端的提示语
+     */
+    private String recordFailure(String username) {
+        LoginAttempt attempt = loginAttempts.computeIfAbsent(username, k -> new LoginAttempt());
+        attempt.failCount++;
+        attempt.lastFailAt = System.currentTimeMillis();
+
+        if (attempt.failCount >= MAX_FAIL_COUNT) {
+            attempt.lockedUntil = System.currentTimeMillis() + LOCK_DURATION_MILLIS;
+            attempt.failCount = 0;
+            return "登录失败次数过多，账号已锁定 5 分钟";
+        }
+        return "用户名或密码错误，还可尝试 " + (MAX_FAIL_COUNT - attempt.failCount) + " 次";
+    }
+
+    /** 清理已过期的失败记录，避免内存无限增长 */
+    private void pruneLoginAttempts() {
+        long now = System.currentTimeMillis();
+        loginAttempts.entrySet().removeIf(e -> {
+            LoginAttempt a = e.getValue();
+            return a.lockedUntil < now && (now - a.lastFailAt) > LOCK_DURATION_MILLIS;
+        });
+    }
+
+    private static class LoginAttempt {
+        private int failCount;
+        private long lastFailAt;
+        private long lockedUntil;
+    }
 
     //创建用户
     @Override
@@ -59,22 +148,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         boolean result = this.removeById(id);
         log.info("删除用户完成");
         return result;
-    }
-
-    //用户登录
-    @Override
-    public Map<String, Object> login(String username, String password) {
-        User existingUser = this.lambdaQuery()
-                .eq(User::getUsername, username)
-                .one();
-        
-        if (existingUser != null && BCryptUtil.matches(password, existingUser.getPassword())) {
-            Map<String, Object> result = new HashMap<>();
-            result.put("token", JwtUtil.generateToken(existingUser.getId(), existingUser.getUsername(), existingUser.getRole()));
-            result.put("user", existingUser);
-            return result;
-        }
-        return null;
     }
 
     //用户注册

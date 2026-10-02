@@ -53,12 +53,6 @@
     <!-- 消息区域 -->
     <div class="ai-messages-wrapper" ref="messagesWrapper">
       <div class="ai-messages" ref="messagesContainer">
-        <!-- 加载历史消息 -->
-        <div class="load-more" v-if="loadingHistory">
-          <el-icon class="is-loading"><Loading /></el-icon>
-          <span>加载历史消息...</span>
-        </div>
-
         <!-- 消息列表 -->
         <div
           v-for="(msg, index) in messages"
@@ -139,7 +133,8 @@
 
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { MoreFilled, Close, Promotion, Loading } from '@element-plus/icons-vue'
+import { MoreFilled, Close, Promotion } from '@element-plus/icons-vue'
+import { getToken, removeToken, removeUser } from '../utils/auth'
 
 // 助手头像
 const assistantAvatar = '/at.png'
@@ -173,7 +168,7 @@ const inputText = ref('')
 const isLoading = ref(false)
 
 // 加载历史消息状态
-const loadingHistory = ref(false)
+// 当前会话保留在组件内存中（关闭浮窗不清空）
 
 // 消息容器引用
 const messagesContainer = ref(null)
@@ -291,14 +286,6 @@ const scrollToBottom = (smooth = true) => {
   })
 }
 
-// 加载历史消息（模拟）
-const loadHistory = async () => {
-  loadingHistory.value = true
-  // 模拟加载延迟
-  await new Promise(resolve => setTimeout(resolve, 1000))
-  loadingHistory.value = false
-}
-
 // 发送消息
 const sendMessage = async () => {
   if (!inputText.value.trim() || isLoading.value) return
@@ -337,13 +324,22 @@ const sendMessage = async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'text/event-stream'
+        'Accept': 'text/event-stream',
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {})
       },
       body: JSON.stringify({ question: question }),
       signal: controller.signal
     })
 
     clearTimeout(timeoutId)
+
+    // JWT鉴权失败：清理本地凭证并跳转登录页，避免停留在无token的空会话
+    if (response.status === 401 || response.status === 403) {
+      removeToken()
+      removeUser()
+      window.location.href = '/login'
+      return
+    }
 
     if (!response.ok) {
       throw new Error('网络请求失败')

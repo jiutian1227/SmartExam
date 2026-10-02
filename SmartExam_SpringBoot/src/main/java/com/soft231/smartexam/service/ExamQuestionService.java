@@ -14,7 +14,11 @@ import java.util.Map;
 public interface ExamQuestionService extends IService<ExamQuestion> {
 
     //获取考试的题目列表
-    List<Map<String, Object>> getExamQuestions(Long examId);
+    /**
+     * 获取试卷题目列表
+     * @param includeAnswer 是否下发正确答案与解析：学生作答时必须为false，教师/超管编辑试卷时为true
+     */
+    List<Map<String, Object>> getExamQuestions(Long examId, boolean includeAnswer);
 
     //向考试添加题目
     ExamQuestion addQuestionToExam(Long examId, Map<String, Object> body);

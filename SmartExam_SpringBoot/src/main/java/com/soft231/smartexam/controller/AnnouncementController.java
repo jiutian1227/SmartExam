@@ -3,6 +3,7 @@ package com.soft231.smartexam.controller;
 import com.soft231.smartexam.common.Result;
 import com.soft231.smartexam.entity.Announcement;
 import com.soft231.smartexam.service.AnnouncementService;
+import com.soft231.smartexam.util.SecurityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -10,7 +11,7 @@ import java.util.List;
 
 //公告管理控制器
 //公告CRUD：创建 create / 查询 getById / 查询全部 list / 更新 update / 删除 delete
-//按角色过滤：根据不同用户角色获取公告列表 getByRole
+//按角色过滤：按当前登录用户角色获取公告列表 getByRole（角色从JWT解析，不信任URL传参）
 @RestController
 @RequestMapping("/api/announcement")
 public class AnnouncementController {
@@ -18,9 +19,13 @@ public class AnnouncementController {
     @Autowired
     private AnnouncementService announcementService;
 
-    //根据用户角色获取公告列表
-    @GetMapping("/role/{role}")
-    public Result<List<Announcement>> getByRole(@PathVariable Integer role) {
+    //按当前登录用户角色获取公告列表（角色取自JWT）
+    @GetMapping("/role")
+    public Result<List<Announcement>> getByRole() {
+        Integer role = SecurityUtils.getRole();
+        if (role == null) {
+            return Result.error(401, "未登录或登录已过期");
+        }
         return Result.success(announcementService.getAnnouncementsByRole(role));
     }
 

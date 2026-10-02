@@ -7,12 +7,12 @@ import com.soft231.smartexam.entity.UserGroupMember;
 import com.soft231.smartexam.mapper.ExamMapper;
 import com.soft231.smartexam.service.ExamService;
 import com.soft231.smartexam.service.UserGroupMemberService;
+import com.soft231.smartexam.util.SecurityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 //考试服务实现类
 //考试CRUD：创建考试 createExam / 用户可见考试列表 listForUser
@@ -36,7 +36,29 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
         return this.baseMapper.listForUser(page, userId);
     }
 
-    //检查用户是否有权限访问考试
+    //按角色综合判定试卷可见性：超管全部，教师仅自己创建，学生仅所属用户组
+    @Override
+    public boolean canAccess(Long examId, Long userId, Integer role) {
+        Exam exam = this.getById(examId);
+        if (exam == null || userId == null || role == null) {
+            return false;
+        }
+
+        // 超级管理员：全部可见
+        if (role == SecurityUtils.Role.SUPER_ADMIN.getCode()) {
+            return true;
+        }
+
+        // 教师：仅自己创建的试卷
+        if (role == SecurityUtils.Role.TEACHER.getCode()) {
+            return exam.getCreatorId() != null && exam.getCreatorId().equals(userId);
+        }
+
+        // 学生：仅所属用户组已绑定的试卷
+        return checkUserAccess(examId, userId);
+    }
+
+    //判断用户是否属于该试卷绑定的任一用户组（未绑定用户组一律不可见）
     @Override
     public boolean checkUserAccess(Long examId, Long userId) {
         Exam exam = this.getById(examId);
@@ -45,35 +67,34 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
         }
 
         String userGroupIds = exam.getUserGroupIds();
+        // 未绑定任何用户组：学生不可见
         if (userGroupIds == null || userGroupIds.trim().isEmpty()) {
-            return true;
+            return false;
         }
 
         List<Long> allowedGroupIds = new ArrayList<>();
         for (String id : userGroupIds.split(",")) {
-            if (!id.trim().isEmpty()) {
-                allowedGroupIds.add(Long.parseLong(id.trim()));
+            String trimmed = id.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            try {
+                allowedGroupIds.add(Long.valueOf(trimmed));
+            } catch (NumberFormatException ignored) {
+                // 忽略脏数据，避免单条异常数据导致整场考试不可访问
             }
         }
 
         if (allowedGroupIds.isEmpty()) {
-            return true;
+            return false;
         }
 
-        List<UserGroupMember> memberships = userGroupMemberService.lambdaQuery()
+        // 只统计"本人所属 且 试卷已绑定"的用户组，避免拉取全部成员关系
+        Long matched = userGroupMemberService.lambdaQuery()
                 .eq(UserGroupMember::getUserId, userId)
-                .list();
+                .in(UserGroupMember::getUserGroupId, allowedGroupIds)
+                .count();
 
-        List<Long> userGroupIdList = memberships.stream()
-                .map(UserGroupMember::getUserGroupId)
-                .collect(Collectors.toList());
-
-        for (Long allowedId : allowedGroupIds) {
-            if (userGroupIdList.contains(allowedId)) {
-                return true;
-            }
-        }
-
-        return false;
+        return matched != null && matched > 0;
     }
 }

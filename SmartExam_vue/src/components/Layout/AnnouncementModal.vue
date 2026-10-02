@@ -32,7 +32,7 @@
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getAnnouncementsByRole } from '../../api/announcement'
-import { getUserRole } from '../../utils/auth'
+// 角色由后端从JWT解析，前端不再读取/传递角色
 
 const props = defineProps({
   visible: {
@@ -61,8 +61,8 @@ watch(dialogVisible, (val) => {
 const loadAnnouncements = async () => {
   loading.value = true
   try {
-    const role = getUserRole()
-    const res = await getAnnouncementsByRole(role)
+    // 角色由后端从JWT解析，避免前端传参被篡改
+    const res = await getAnnouncementsByRole()
     if (res.code === 200) {
       announcements.value = res.data || []
     } else {

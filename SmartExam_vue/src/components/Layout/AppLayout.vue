@@ -16,13 +16,28 @@
 </template>
 
 <script setup>
-import { ref, provide } from 'vue'
+import { ref, provide, onMounted } from 'vue'
 import Sidebar from './Sidebar.vue'
 import Header from './Header.vue'
 import AnnouncementModal from './AnnouncementModal.vue'
+import { getToken, getUser, setUser } from '../../utils/auth'
+import { getCurrentUser } from '../../api/auth'
 
 const sidebarCollapsed = ref(false)
 const showAnnouncementModal = ref(false)
+
+// 以JWT为唯一身份来源：进入主框架时校验token，并用服务端返回的身份刷新本地缓存
+onMounted(async () => {
+  if (!getToken()) return
+  try {
+    const res = await getCurrentUser()
+    if (res.code === 200 && res.data) {
+      setUser({ ...(getUser() || {}), ...res.data })
+    }
+  } catch (error) {
+    // token失效导致的401/403已由request拦截器统一处理并跳转登录页
+  }
+})
 
 provide('showAnnouncement', () => {
   showAnnouncementModal.value = true

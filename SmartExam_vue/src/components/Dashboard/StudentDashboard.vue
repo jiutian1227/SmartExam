@@ -156,11 +156,10 @@ const recentExamOverview = computed(() => {
 
 const loadData = async () => {
   try {
-    const userId = Number(user.id)
     const [examRes, recordRes, groupRes] = await Promise.all([
-      getStudentExamList(userId),
-      getRecordListByUserId(userId),
-      getMyGroups(userId)
+      getStudentExamList(),
+      getRecordListByUserId(),
+      getMyGroups()
     ])
     let totalExamCount = 0
     if (examRes.code === 200) {

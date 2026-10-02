@@ -60,7 +60,6 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getStudentExamList } from '../../api/exam'
 import { getMyRecords } from '../../api/record'
-import { getUser } from '../../utils/auth'
 import { formatDateTime } from '../../utils/format'
 import { Clock, Calendar, Star, ArrowRight, InfoFilled } from '@element-plus/icons-vue'
 
@@ -152,9 +151,7 @@ const goToExam = (examId) => {
 const loadExams = async () => {
   loading.value = true
   try {
-    const user = getUser()
-    const userId = user?.id || 1
-    const res = await getStudentExamList(userId, {
+    const res = await getStudentExamList({
       pageNum: currentPage.value,
       pageSize: pageSize.value
     })
@@ -176,9 +173,7 @@ const loadExams = async () => {
 
 const loadExamStatuses = async () => {
   try {
-    const user = getUser()
-    const userId = user?.id || 1
-    const res = await getMyRecords(userId)
+    const res = await getMyRecords()
     if (res.code === 200) {
       const records = res.data.records || res.data || []
       if (Array.isArray(records)) {

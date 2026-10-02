@@ -72,13 +72,11 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Remove } from '@element-plus/icons-vue'
 import { getGroupById, createGroup, updateGroup, getGroupMembers, removeGroupMember, refreshShareCode } from '../../api/group'
-import { getUser } from '../../utils/auth'
 import { formatDateTime } from '../../utils/format'
 
 const router = useRouter()
 const route = useRoute()
 
-const currentUser = getUser()
 const isEditMode = ref(false)
 const memberList = ref([])
 
@@ -86,8 +84,7 @@ const form = ref({
   id: null,
   name: '',
   description: '',
-  shareCode: '',
-  creatorId: currentUser?.id || 1
+  shareCode: ''
 })
 
 const formatTime = formatDateTime
@@ -104,8 +101,7 @@ const loadGroup = async (id) => {
         id: res.data.id,
         name: res.data.name,
         description: res.data.description,
-        shareCode: res.data.shareCode,
-        creatorId: res.data.creatorId
+        shareCode: res.data.shareCode
       }
     }
   } catch (error) {

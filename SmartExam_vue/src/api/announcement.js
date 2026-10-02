@@ -1,9 +1,9 @@
 import request from '../utils/request'
 
-// 获取当前角色的公告列表
-export function getAnnouncementsByRole(role) {
+// 获取当前登录用户的公告列表（角色由后端从JWT解析，前端不再传参）
+export function getAnnouncementsByRole() {
   return request({
-    url: `/api/announcement/role/${role}`,
+    url: '/api/announcement/role',
     method: 'get'
   })
 }

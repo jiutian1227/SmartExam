@@ -9,6 +9,7 @@
     </div>
     <div class="exam-header">
       <div v-if="!isReadOnly" class="header-right">
+        <span v-if="lastSavedAt" class="save-hint">答案已自动保存 {{ lastSavedAt }}</span>
         <div class="timer" :class="{ warning: remainingTime < 300 }">
           <el-icon :size="22"><Clock /></el-icon>
           <span>{{ formatTime(remainingTime) }}</span>
@@ -114,7 +115,7 @@
         </div>
 
         <div class="submit-area" v-if="showSubmitButton">
-          <el-button type="primary" size="large" @click="submitExam">提交试卷</el-button>
+          <el-button type="primary" size="large" :loading="submitting" @click="submitExam()">提交试卷</el-button>
         </div>
       </div>
 
@@ -154,7 +155,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getExamById, getExamQuestions } from '../../api/exam'
-import { submitExam as submitExamApi, startExam, getExamStatus } from '../../api/record'
+import { submitExam as submitExamApi, startExam, getExamStatus, saveDraft } from '../../api/record'
 import { getUser } from '../../utils/auth'
 import { formatDateTime } from '../../utils/format'
 import { Clock, SwitchButton, CircleCheck, Edit } from '@element-plus/icons-vue'
@@ -179,6 +180,19 @@ const recordId = ref(null)
 const currentQuestionId = ref(null)
 const exitDialogVisible = ref(false)
 let timer = null
+// 服务端时间与本地时钟的偏差，用于校准倒计时（防止改本地系统时间延长作答）
+let serverTimeOffset = 0
+// 距下次向服务端同步剩余秒数的计数
+let syncCountdown = 30
+// 自动存卷：本地有改动但还没上报服务端时置为 true，等心跳到达才真正发请求，省流量
+let draftDirty = false
+// 草稿上报进行中，防止慢请求叠加
+let draftSaving = false
+// 最近一次草稿保存成功的时刻，仅用于给考生一个"答案已存好"的反馈
+const lastSavedAt = ref('')
+// 提交进行中：按钮置灰并忽略重复触发。
+// 连点提交、或"超时自动交卷"与"手动交卷"同时发生，都会撞到这里，只放行第一个请求。
+const submitting = ref(false)
 
 // 中文数字转换
 const getChineseNum = (num) => {
@@ -194,6 +208,8 @@ const getStorageKey = () => {
 const saveAnswersToStorage = () => {
   try {
     localStorage.setItem(getStorageKey(), JSON.stringify(answers.value))
+    // 有了新改动，等下一次心跳统一上报服务端，避免每次点选项都打一次接口
+    draftDirty = true
   } catch (e) {
     console.error('保存答案失败', e)
   }
@@ -204,17 +220,69 @@ const loadAnswersFromStorage = () => {
     const saved = localStorage.getItem(getStorageKey())
     if (saved) {
       answers.value = JSON.parse(saved)
+      return true
     }
   } catch (e) {
     console.error('加载答案失败', e)
   }
+  return false
 }
 
 const clearAnswersFromStorage = () => {
   try {
     localStorage.removeItem(getStorageKey())
+    draftDirty = false
   } catch (e) {
     console.error('清除答案失败', e)
+  }
+}
+
+// 把 answers 序列化成后端约定的格式（单选 A、多选 A,C、判断 正确/错误）
+const formatAnswers = () => {
+  const formatted = {}
+  questions.value.forEach(q => {
+    const answer = answers.value[q.id]
+    if (answer === undefined || answer === null || answer === '') return
+    if (q.type === 0) {
+      formatted[q.id] = String.fromCharCode(65 + answer)
+    } else if (q.type === 1) {
+      if (Array.isArray(answer)) {
+        formatted[q.id] = answer.map(i => String.fromCharCode(65 + i)).sort().join(',')
+      }
+    } else if (q.type === 2) {
+      formatted[q.id] = answer === 0 ? '正确' : '错误'
+    } else if (q.type === 3) {
+      formatted[q.id] = Array.isArray(answer) ? answer.join(',') : answer
+    } else {
+      formatted[q.id] = answer
+    }
+  })
+  return formatted
+}
+
+// 自动存卷：把当前答案作为草稿上报服务端，换设备或清缓存后仍能恢复作答。
+// 刻意静默失败——草稿没传成功不能打扰正在答题的学生，下一轮心跳会自动重试。
+const saveDraftToServer = async () => {
+  if (isReadOnly.value || draftSaving || !draftDirty) return
+  draftSaving = true
+  try {
+    await saveDraft({
+      examId: parseInt(examId),
+      answers: JSON.stringify(formatAnswers())
+    })
+    draftDirty = false
+    lastSavedAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  } catch (e) {
+    // 断网 / 超时 / 服务端已结束作答：保留 draftDirty，交给下一次心跳重试
+  } finally {
+    draftSaving = false
+  }
+}
+
+// 切到后台或关闭页面前立刻同步一次，缩短"最后一次改动"的丢失窗口
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'hidden') {
+    saveDraftToServer()
   }
 }
 
@@ -333,15 +401,15 @@ const formatTime = (seconds) => {
 
 const loadExamData = async () => {
   try {
-    const user = getUser()
-
     const examRes = await getExamById(examId)
     if (examRes.code === 200 && examRes.data) {
       exam.value = examRes.data
     }
 
-    const statusRes = await getExamStatus(user.id, parseInt(examId))
+    const statusRes = await getExamStatus(parseInt(examId), true)
     let hasSubmitted = false
+    let serverRemain = null
+    let serverDraft = null
     if (statusRes.code === 200 && statusRes.data) {
       const record = statusRes.data
       if (record.status === 2) {
@@ -350,20 +418,28 @@ const loadExamData = async () => {
       if (record.recordId) {
         recordId.value = record.recordId
       }
+      // 服务端已保存的草稿答案，用于换设备/清缓存后恢复作答
+      if (record.answers && typeof record.answers === 'object') {
+        serverDraft = record.answers
+      }
+      // 以服务端时间为准，抵消本地时钟偏差
+      if (typeof record.serverTime === 'number') {
+        serverTimeOffset = record.serverTime - Date.now()
+      }
+      if (typeof record.remainSeconds === 'number') {
+        serverRemain = record.remainSeconds
+      }
     }
 
-    const now = new Date()
-    const endTime = new Date(exam.value.endTime)
-    const startTime = new Date(exam.value.startTime)
-    
-    if (hasSubmitted || now > endTime) {
+    // 只读判定：已提交 / 服务端判定时间已耗尽 / 已过考试统一结束时间
+    const nowServer = Date.now() + serverTimeOffset
+    if (hasSubmitted || serverRemain === 0 || nowServer > new Date(exam.value.endTime).getTime()) {
       isReadOnly.value = true
       showSubmitButton.value = false
     }
 
     if (!hasSubmitted && !isReadOnly.value) {
       const startRes = await startExam({
-        userId: user.id,
         examId: parseInt(examId)
       })
 
@@ -371,17 +447,11 @@ const loadExamData = async () => {
         recordId.value = startRes.data.id
       }
 
-      if (exam.value) {
-        const totalSeconds = exam.value.duration * 60
-
-        if (startRes.data && startRes.data.startTime) {
-          const startTimeVal = new Date(startRes.data.startTime).getTime()
-          const nowTime = Date.now()
-          const elapsedSeconds = Math.floor((nowTime - startTimeVal) / 1000)
-          remainingTime.value = Math.max(0, totalSeconds - elapsedSeconds)
-        } else {
-          remainingTime.value = totalSeconds
-        }
+      // 倒计时以服务端剩余秒数为准，刷新页面/改本地时间都不会重置
+      if (typeof serverRemain === 'number' && serverRemain > 0) {
+        remainingTime.value = serverRemain
+      } else {
+        remainingTime.value = (exam.value.duration || 0) * 60
       }
     }
 
@@ -390,9 +460,24 @@ const loadExamData = async () => {
       questions.value = questionsRes.data
     }
 
-    loadAnswersFromStorage()
+    // 恢复作答：同一设备上每次改动都会写本地，所以本地有内容时它必然是最新的；
+    // 只有本地为空（换设备、清缓存、换浏览器）才用服务端草稿回填。
+    const hasLocalAnswers = loadAnswersFromStorage()
+    if (!hasLocalAnswers && serverDraft && Object.keys(serverDraft).length > 0) {
+      answers.value = serverDraft
+      saveAnswersToStorage()
+      // 服务端存的已经是这份内容，不必再回传一次
+      draftDirty = false
+    }
   } catch (error) {
     console.error('加载考试数据失败', error)
+    const status = error?.response?.status ?? error?.code
+    // 403：试卷不在当前学生所属用户组范围内；400：未开考 / 考试已结束
+    // 提示已由 request 拦截器统一弹出，直接退回列表
+    if (status === 403 || status === 400) {
+      router.push('/student/exam-list')
+      return
+    }
     setTimeout(() => {
       router.push('/student/exam-list')
     }, 2000)
@@ -413,6 +498,10 @@ const confirmExit = () => {
 }
 
 const submitExam = async (isAuto = false) => {
+  // 已经有提交在途：直接忽略。
+  // 覆盖两种情况——考生连点提交按钮；倒计时归零触发自动交卷的同时考生又点了提交。
+  if (submitting.value) return
+
   if (!isAuto) {
     try {
       await ElMessageBox.confirm('确定要提交试卷吗？', '提示', {
@@ -425,58 +514,83 @@ const submitExam = async (isAuto = false) => {
     }
   }
 
+  submitting.value = true
   clearInterval(timer)
   try {
-    const user = getUser()
-
-    const formattedAnswers = {}
-    questions.value.forEach(q => {
-      const answer = answers.value[q.id]
-      if (answer !== undefined && answer !== null && answer !== '') {
-        if (q.type === 0) {
-          formattedAnswers[q.id] = String.fromCharCode(65 + answer)
-        } else if (q.type === 1) {
-          if (Array.isArray(answer)) {
-            formattedAnswers[q.id] = answer.map(i => String.fromCharCode(65 + i)).sort().join(',')
-          }
-        } else if (q.type === 2) {
-          formattedAnswers[q.id] = answer === 0 ? '正确' : '错误'
-        } else if (q.type === 3) {
-          if (Array.isArray(answer)) {
-            formattedAnswers[q.id] = answer.join(',')
-          } else {
-            formattedAnswers[q.id] = answer
-          }
-        } else {
-          formattedAnswers[q.id] = answer
-        }
-      }
-    })
-
     const recordData = {
-      userId: user.id,
       examId: parseInt(examId),
-      answers: JSON.stringify(formattedAnswers)
+      answers: JSON.stringify(formatAnswers())
     }
     await submitExamApi(recordData)
     clearAnswersFromStorage()
-    ElMessage.success(isAuto ? '考试已自动提交' : '试卷提交成功！')
+    ElMessage.success(isAuto ? '考试时间已到，已自动提交' : '试卷提交成功！')
     router.push('/student/exam-list')
   } catch (error) {
+    const status = error?.response?.status
+    // 后端拒收（超时 / 重复提交 / 未开考）：拦截器已弹出具体原因，转为只读并退回列表
+    if (status === 400 || status === 403) {
+      clearInterval(timer)
+      isReadOnly.value = true
+      showSubmitButton.value = false
+      // 这里不解锁 submitting：本来就要离开页面了，保持按钮不可用
+      setTimeout(() => {
+        router.push('/student/exam-list')
+      }, 1500)
+      return
+    }
+    // 网络中断等可重试的失败：解锁，让考生能再点一次
+    submitting.value = false
     ElMessage.error('提交失败，请重试')
+  }
+}
+
+// 向服务端同步剩余作答时间，校准本地倒计时
+const syncRemainFromServer = async () => {
+  try {
+    const res = await getExamStatus(parseInt(examId))
+    if (res.code !== 200 || !res.data) return
+    const record = res.data
+    if (typeof record.serverTime === 'number') {
+      serverTimeOffset = record.serverTime - Date.now()
+    }
+    // 顺带上报一次答题草稿：复用这条 30 秒心跳，不必为自动存卷单开定时器
+    await saveDraftToServer()
+    if (record.status === 2) {
+      clearInterval(timer)
+      isReadOnly.value = true
+      showSubmitButton.value = false
+      return
+    }
+    if (typeof record.remainSeconds === 'number') {
+      remainingTime.value = record.remainSeconds
+      if (record.remainSeconds <= 0) {
+        clearInterval(timer)
+        submitExam(true)
+      }
+    }
+  } catch (e) {
+    // 同步失败时沿用本地计时，下一次心跳再试
   }
 }
 
 onMounted(() => {
   userInfo.value = getUser()
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   loadExamData().then(() => {
     if (!isReadOnly.value) {
       timer = setInterval(() => {
         if (remainingTime.value > 0) {
           remainingTime.value--
           if (remainingTime.value === 0) {
+            clearInterval(timer)
             submitExam(true)
+            return
           }
+        }
+        // 每30秒向服务端校准一次，防止通过修改本地系统时间延长作答
+        if (--syncCountdown <= 0) {
+          syncCountdown = 30
+          syncRemainFromServer()
         }
       }, 1000)
     }
@@ -484,6 +598,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   if (timer) {
     clearInterval(timer)
   }
@@ -540,6 +655,12 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 .header-right { display: flex; align-items: center; gap: var(--space-5); }
+
+/* 自动存卷状态提示：让考生知道答案已经存到服务端 */
+.save-hint {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+}
 
 .timer {
   display: flex;

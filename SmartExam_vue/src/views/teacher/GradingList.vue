@@ -98,7 +98,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, View, Files } from '@element-plus/icons-vue'
 import { getGradingStats } from '../../api/record'
-import { getUser, isSuperAdmin } from '../../utils/auth'
+import { isSuperAdmin } from '../../utils/auth'
 
 const router = useRouter()
 const examList = ref([])
@@ -125,16 +125,14 @@ const goBack = () => {
 
 const loadGradingStats = async () => {
   try {
-    const currentUser = getUser()
     const res = await getGradingStats({
       pageNum: currentPage.value,
-      pageSize: pageSize.value,
-      creatorId: isSuperAdmin() ? null : currentUser?.id
+      pageSize: pageSize.value
     })
     if (res.code === 200) {
       examList.value = res.data.records || []
       total.value = res.data.total || 0
-      const allRes = await getGradingStats({ pageNum: 1, pageSize: 10000, creatorId: isSuperAdmin() ? null : currentUser?.id })
+      const allRes = await getGradingStats({ pageNum: 1, pageSize: 10000 })
       if (allRes.code === 200) {
         allExams.value = allRes.data.records || []
       }

@@ -128,6 +128,8 @@ const formRef = ref(null)
 const form = ref({ username: '', password: '' })
 const isVerified = ref(false)
 const showVcode = ref(false)
+// 滑块验证码通过后签发的一次性凭证，登录请求必须携带
+const captchaToken = ref('')
 
 const formDisabled = computed(() => {
   return !form.value.username.trim() || !form.value.password.trim()
@@ -349,7 +351,11 @@ const handleLogin = async () => {
   try {
     await formRef.value.validate()
     isLoading.value = true
-    const response = await login(form.value)
+    const response = await login({
+      username: form.value.username,
+      password: form.value.password,
+      captchaToken: captchaToken.value
+    })
     if (response.code === 200) {
       setToken(response.data.token)
       setUser(response.data.user)
@@ -359,16 +365,21 @@ const handleLogin = async () => {
       ElMessage.error(response.message || '登录失败')
     }
   } catch (error) {
-    if (error !== false) {
+    // 400（验证码失效 / 用户名或密码错误 / 账号锁定）的具体原因已由 request 拦截器弹出，此处不重复提示
+    if (!error?.response) {
       ElMessage.error('网络异常，请检查网络连接后重试')
     }
   } finally {
+    // 凭证一次性：无论成败都作废，下次登录必须重新完成滑块验证
+    captchaToken.value = ''
     isLoading.value = false
   }
 }
 
-const onCaptchaSuccess = async () => {
+const onCaptchaSuccess = async (token) => {
   showVcode.value = false
+  // 保存服务端签发的验证码凭证，登录时一并提交
+  captchaToken.value = token || ''
   await handleLogin()
 }
 

@@ -94,7 +94,6 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { joinGroup as joinGroupApi, getMyGroups, joinByShareCode, leaveGroup, getGroupByShareCode } from '../../api/group'
-import { getUser } from '../../utils/auth'
 import { formatDateTime } from '../../utils/format'
 import { Search, CirclePlus, Avatar, CircleClose, InfoFilled, Close } from '@element-plus/icons-vue'
 
@@ -109,13 +108,7 @@ const queryError = ref('')
 const loadMyGroups = async () => {
   loading.value = true
   try {
-    const user = getUser()
-    const userId = user?.id
-    if (!userId) {
-      ElMessage.error('用户未登录')
-      return
-    }
-    const myGroupsRes = await getMyGroups(userId)
+    const myGroupsRes = await getMyGroups()
     if (myGroupsRes.code === 200) {
       myGroups.value = myGroupsRes.data || []
     }
@@ -138,9 +131,7 @@ const handleQueryByCode = async () => {
   querying.value = true
 
   try {
-    const user = getUser()
-    const userId = user?.id
-    const res = await getGroupByShareCode(shareCode.value.trim(), userId)
+    const res = await getGroupByShareCode(shareCode.value.trim())
     if (res.code === 200) {
       queriedGroup.value = res.data
     } else {
@@ -158,11 +149,8 @@ const handleJoinQueriedGroup = async () => {
 
   joining.value = true
   try {
-    const user = getUser()
-    const userId = user?.id
     const res = await joinByShareCode({
-      shareCode: queriedGroup.value.shareCode,
-      userId
+      shareCode: queriedGroup.value.shareCode
     })
     if (res.code === 200) {
       ElMessage.success('加入成功')
@@ -180,13 +168,6 @@ const handleJoinQueriedGroup = async () => {
 
 const handleLeaveGroup = async (group) => {
   try {
-    const user = getUser()
-    const userId = user?.id
-    if (!userId) {
-      ElMessage.error('用户未登录')
-      return
-    }
-
     await ElMessageBox.confirm(
       `确定要退出用户组「${group.name}」吗？`,
       '退出确认',
@@ -199,8 +180,7 @@ const handleLeaveGroup = async (group) => {
     )
 
     await leaveGroup({
-      userGroupId: group.id,
-      userId
+      userGroupId: group.id
     })
     ElMessage.success(`已退出 ${group.name}`)
     await loadMyGroups()

@@ -60,7 +60,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getUser, isSuperAdmin } from '../../utils/auth'
+import { getUser } from '../../utils/auth'
 import { getGroupList } from '../../api/group'
 import { getExamList } from '../../api/exam'
 import { getQuestionList } from '../../api/question'
@@ -89,25 +89,24 @@ const examStats = ref([])
 
 const loadData = async () => {
   try {
-    const userId = Number(user.id)
-    const superAdmin = isSuperAdmin()
+    // 列表数据已由后端按JWT身份过滤（教师仅本人，超管全部），无需前端再筛
     const [groupRes, examRes, questionRes, gradingStatsRes] = await Promise.all([
       getGroupList(),
       getExamList({ pageNum: 1, pageSize: 100 }),
       getQuestionList({ pageNum: 1, pageSize: 100 }),
-      getGradingStats({ pageNum: 1, pageSize: 100, creatorId: superAdmin ? null : userId })
+      getGradingStats({ pageNum: 1, pageSize: 100 })
     ])
     if (groupRes.code === 200) {
       const groups = groupRes.data.records || groupRes.data || []
-      groupCount.value = superAdmin ? groups.length : groups.filter(g => Number(g.creatorId) === userId).length
+      groupCount.value = groups.length
     }
     if (examRes.code === 200) {
       const exams = examRes.data.records || examRes.data || []
-      examCount.value = superAdmin ? exams.length : exams.filter(e => Number(e.creatorId) === userId).length
+      examCount.value = exams.length
     }
     if (questionRes.code === 200) {
       const questions = questionRes.data.records || questionRes.data || []
-      questionCount.value = superAdmin ? questions.length : questions.filter(q => Number(q.creatorId) === userId).length
+      questionCount.value = questions.length
     }
     if (gradingStatsRes.code === 200) {
       const stats = gradingStatsRes.data.records || gradingStatsRes.data || []

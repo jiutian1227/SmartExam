@@ -28,8 +28,9 @@ export const deleteExam = (id) => {
 //  2. 学生入口
 //========================================//
 
-export const getStudentExamList = (userId, params = {}) => {
-  return request.get('/api/exams/available', { params: { userId, ...params } })
+//获取当前学生可参加的考试列表（身份从JWT解析）
+export const getStudentExamList = (params = {}) => {
+  return request.get('/api/exams/available', { params })
 }
 
 //========================================//

@@ -37,7 +37,7 @@ public class Announcement {
     private String type;
 
     /**
-     * 目标角色（0-管理员，1-学生，2-教师，多个角色用逗号分隔）
+     * 目标角色（与 user.role 一致：0-教师，1-学生，2-超级管理员，多个角色用逗号分隔；为空表示全体可见）
      */
     @TableField("target_roles")
     private String targetRoles;

@@ -30,14 +30,14 @@
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="title" label="考试名称" width="200" />
         <el-table-column prop="description" label="描述" width="250" />
-        <el-table-column label="考试时间" width="220">
+        <el-table-column label="考试时间" width="250">
           <template #default="scope">
             {{ formatDateTime(scope.row.startTime) }} ~ {{ formatDateTime(scope.row.endTime) }}
           </template>
         </el-table-column>
-        <el-table-column prop="duration" label="时长(分钟)" width="150" />
+        <el-table-column prop="duration" label="时长(分钟)" width="250" />
         <el-table-column prop="totalScore" label="总分" width="100" />
-        <el-table-column label="操作" width="200">
+        <el-table-column label="操作" width="400">
           <template #default="scope">
             <el-button v-if="!isSuperAdmin()" size="default" type="primary" :icon="Edit" @click="goToEdit(scope.row)">
               编辑
@@ -70,7 +70,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { formatDateTime } from '../../utils/format'
 import { getExamList, deleteExam } from '../../api/exam'
-import { getUser, isSuperAdmin } from '../../utils/auth'
+import { isSuperAdmin } from '../../utils/auth'
 
 const router = useRouter()
 
@@ -93,13 +93,9 @@ const handlePageChange = (page) => {
 
 const loadExams = async () => {
   try {
-    const currentUser = getUser()
     const params = {
       pageNum: currentPage.value,
       pageSize: pageSize.value
-    }
-    if (!isSuperAdmin()) {
-      params.creatorId = currentUser?.id
     }
     if (searchText.value) {
       params.keyword = searchText.value

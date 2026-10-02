@@ -78,7 +78,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { formatDateTime } from '../../utils/format'
 import { getGroupList, deleteGroup } from '../../api/group'
-import { getUser, isSuperAdmin } from '../../utils/auth'
+import { isSuperAdmin } from '../../utils/auth'
 
 const router = useRouter()
 const searchText = ref('')
@@ -96,13 +96,9 @@ const search = () => {
 
 const loadGroups = async () => {
   try {
-    const currentUser = getUser()
     const params = {
       pageNum: currentPage.value,
       pageSize: pageSize.value
-    }
-    if (!isSuperAdmin()) {
-      params.creatorId = currentUser?.id
     }
     if (searchText.value) {
       params.keyword = searchText.value

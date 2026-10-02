@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 //考试题目关联服务实现类
 //题目关联：获取题目列表 getExamQuestions / 添加题目 addQuestionToExam / 更新分数 updateQuestionScore / 移除题目 removeQuestionFromExam
@@ -19,33 +20,54 @@ public class ExamQuestionServiceImpl extends ServiceImpl<ExamQuestionMapper, Exa
     @Autowired
     private QuestionService questionService;
 
-    //获取考试的题目列表
+    //获取考试的题目列表（includeAnswer=false 时不下发答案与解析，供学生作答使用）
     @Override
-    public List<Map<String, Object>> getExamQuestions(Long examId) {
+    public List<Map<String, Object>> getExamQuestions(Long examId, boolean includeAnswer) {
         List<ExamQuestion> examQuestions = this.lambdaQuery()
                 .eq(ExamQuestion::getExamId, examId)
                 .orderByAsc(ExamQuestion::getSortOrder)
                 .list();
 
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (ExamQuestion eq : examQuestions) {
-            Question question = questionService.getById(eq.getQuestionId());
-            if (question != null) {
-                Map<String, Object> item = new HashMap<>();
-                item.put("id", question.getId());
-                item.put("type", question.getType());
-                item.put("content", question.getContent());
-                item.put("options", question.getOptions());
-                item.put("answer", question.getAnswer());
-                item.put("analysis", question.getAnalysis());
-                item.put("score", eq.getScore());
-                item.put("examScore", eq.getScore());
-                item.put("examQuestionId", eq.getId());
-                result.add(item);
-            }
+        if (examQuestions.isEmpty()) {
+            return new ArrayList<>();
         }
 
-        result.sort(Comparator.comparingInt(a -> (Integer) a.get("type")));
+        // 一次性批量取出所有题目，避免循环内逐条 getById 产生的 N+1 查询
+        List<Long> questionIds = examQuestions.stream()
+                .map(ExamQuestion::getQuestionId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, Question> questionMap = questionService.listByIds(questionIds).stream()
+                .collect(Collectors.toMap(Question::getId, q -> q));
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (ExamQuestion eq : examQuestions) {
+            Question question = questionMap.get(eq.getQuestionId());
+            if (question == null) {
+                continue;
+            }
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", question.getId());
+            item.put("type", question.getType());
+            item.put("content", question.getContent());
+            item.put("options", question.getOptions());
+            // 答案与解析只在教师/超管编辑试卷时下发，学生作答接口不返回，避免提前泄题
+            if (includeAnswer) {
+                item.put("answer", question.getAnswer());
+                item.put("analysis", question.getAnalysis());
+            }
+            item.put("score", eq.getScore());
+            item.put("examScore", eq.getScore());
+            item.put("examQuestionId", eq.getId());
+            item.put("sortOrder", eq.getSortOrder() == null ? 0 : eq.getSortOrder());
+            result.add(item);
+        }
+
+        // 尊重教师在试卷中设置的题目顺序，序号相同时再按题型归组
+        result.sort(Comparator
+                .comparingInt((Map<String, Object> a) -> (Integer) a.get("sortOrder"))
+                .thenComparingInt(a -> (Integer) a.get("type")));
         return result;
     }
 

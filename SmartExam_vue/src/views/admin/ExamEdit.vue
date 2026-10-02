@@ -44,7 +44,7 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="开放用户组">
+              <el-form-item label="开放用户组（必选）">
                 <el-select v-model="form.selectedGroupIds" multiple placeholder="选择可参加考试的用户组" style="width: 100%">
                   <el-option
                     v-for="group in groupList"
@@ -251,7 +251,6 @@ import { getExamById, createExam, updateExam, getExamQuestions, addQuestionToExa
 import { getQuestionList } from '../../api/question'
 import { getGroupList } from '../../api/group'
 import { getKnowledgePointList } from '../../api/knowledgePoint'
-import { getUser } from '../../utils/auth'
 import { ArrowLeft } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -275,7 +274,6 @@ const typeConfig = ref({
 })
 
 const savingAll = ref(false)
-const currentUser = getUser()
 
 const form = ref({
   id: null,
@@ -286,8 +284,7 @@ const form = ref({
   startTime: '',
   endTime: '',
   duration: 120,
-  totalScore: 100,
-  creatorId: currentUser?.id || 1
+  totalScore: 100
 })
 
 const getPerScore = (count, total) => {
@@ -379,8 +376,7 @@ const loadGroups = async () => {
 
 const loadKnowledgePoints = async () => {
   try {
-    const user = getUser()
-    const res = await getKnowledgePointList(user?.id || 1)
+    const res = await getKnowledgePointList()
     if (res.code === 200) {
       knowledgePointList.value = res.data
     }
@@ -432,6 +428,11 @@ const loadExam = async (id) => {
 const handleSaveBasic = async () => {
   if (!form.value.title) {
     ElMessage.error('请填写考试名称')
+    return
+  }
+  // 学生只能看到自己所属用户组的试卷，必须绑定用户组
+  if (!form.value.selectedGroupIds || form.value.selectedGroupIds.length === 0) {
+    ElMessage.error('请至少选择一个可见用户组，否则学生无法看到该试卷')
     return
   }
 

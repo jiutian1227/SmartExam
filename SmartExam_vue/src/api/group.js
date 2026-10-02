@@ -48,8 +48,8 @@ export const leaveGroup = (data) => {
   })
 }
 
-export const getMyGroups = (userId) => {
-  return request.get(`/api/user-group/my-groups/${userId}`)
+export const getMyGroups = () => {
+  return request.get('/api/user-group/my-groups')
 }
 
 export const refreshShareCode = (groupId) => {
@@ -60,6 +60,6 @@ export const joinByShareCode = (data) => {
   return request.post('/api/user-group/join-by-code', data)
 }
 
-export const getGroupByShareCode = (shareCode, userId) => {
-  return request.get(`/api/user-group/by-share-code/${shareCode}`, { params: { userId } })
+export const getGroupByShareCode = (shareCode) => {
+  return request.get(`/api/user-group/by-share-code/${shareCode}`)
 }

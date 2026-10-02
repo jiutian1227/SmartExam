@@ -24,8 +24,13 @@ public interface UserService extends IService<User> {
     //删除用户
     boolean deleteUser(Long id);
 
-    //用户登录
-    Map<String, Object> login(String username, String password);
+    /**
+     * 用户登录
+     * @param username     用户名
+     * @param password     明文密码
+     * @param captchaToken 滑块验证码通过后签发的一次性凭证
+     */
+    Map<String, Object> login(String username, String password, String captchaToken);
 
     //用户注册
     User register(User user);

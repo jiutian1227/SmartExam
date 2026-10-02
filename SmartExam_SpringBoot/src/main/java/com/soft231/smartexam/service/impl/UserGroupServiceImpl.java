@@ -1,5 +1,6 @@
 package com.soft231.smartexam.service.impl;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.soft231.smartexam.entity.UserGroup;
 import com.soft231.smartexam.entity.UserGroupMember;
@@ -77,6 +78,15 @@ public class UserGroupServiceImpl extends ServiceImpl<UserGroupMapper, UserGroup
             return baseMapper.selectGroupsWithMemberCount();
         }
         return baseMapper.selectGroupsWithMemberCountByCreatorId(creatorId);
+    }
+
+    //获取用户组列表（数据库分页，关键词过滤在SQL中完成）
+    @Override
+    public IPage<UserGroupVO> listWithMemberCount(IPage<UserGroupVO> page, Long creatorId, String keyword) {
+        if (creatorId == null) {
+            return baseMapper.selectGroupsWithMemberCountPage(page, keyword);
+        }
+        return baseMapper.selectGroupsWithMemberCountByCreatorIdPage(page, creatorId, keyword);
     }
 
     //创建用户组

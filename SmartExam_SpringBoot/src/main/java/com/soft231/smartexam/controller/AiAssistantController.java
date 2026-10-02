@@ -4,6 +4,7 @@ import com.soft231.smartexam.common.Result;
 import com.soft231.smartexam.service.AiAssistantService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +15,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 //AI助手控制器
 //回答学生问题（流式输出） askQuestionStream
@@ -26,12 +29,22 @@ public class AiAssistantController {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * 流式输出用固定线程池，避免每个请求都 new Thread() 导致并发时线程暴涨
+     */
+    private final ExecutorService streamingExecutor = Executors.newFixedThreadPool(8);
+
+    @PreDestroy
+    public void shutdownStreamingExecutor() {
+        streamingExecutor.shutdown();
+    }
+
     //回答学生问题（流式输出）
     @PostMapping(value = "/ask-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter askQuestionStream(@RequestBody Map<String, Object> data) {
         SseEmitter emitter = new SseEmitter(300000L);
 
-        Thread streamingThread = new Thread(() -> {
+        streamingExecutor.submit(() -> {
             try {
                 String question = (String) data.get("question");
                 String subject = (String) data.get("subject");
@@ -96,8 +109,6 @@ public class AiAssistantController {
                 emitter.completeWithError(e);
             }
         });
-        
-        streamingThread.start();
         
         return emitter;
     }

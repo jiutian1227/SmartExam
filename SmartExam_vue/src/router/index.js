@@ -13,7 +13,7 @@ const routes = [
   {
     path: '/',
     name: 'Home',
-    component: () => import('../components/layout/AppLayout.vue'),
+    component: () => import('../components/Layout/AppLayout.vue'),
     redirect: '/home',
     children: [
       { path: 'home', name: 'HomePage', meta: { title: '首页' }, component: () => import('../views/home.vue') },

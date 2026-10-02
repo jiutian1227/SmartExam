@@ -319,7 +319,7 @@ import { Search, Plus, Edit, View, Delete } from '@element-plus/icons-vue'
 import { formatDateTime } from '../../utils/format'
 import { getQuestionList, createQuestion, updateQuestion, deleteQuestion, aiGenerateQuestions } from '../../api/question'
 import { getKnowledgePointList, createKnowledgePoint, deleteKnowledgePoint as deleteKP } from '../../api/knowledgePoint'
-import { getUser, isSuperAdmin } from '../../utils/auth'
+import { isSuperAdmin } from '../../utils/auth'
 
 const searchText = ref('')
 const selectedKnowledgePoint = ref(null)
@@ -327,12 +327,6 @@ const showAddModal = ref(false)
 const showAiModal = ref(false)
 const showViewModal = ref(false)
 
-const getCreatorId = () => {
-  if (isSuperAdmin()) return null
-  return getUser()?.id
-}
-
-const currentUser = getUser()
 const showKnowledgePointModal = ref(false)
 const questionList = ref([])
 const knowledgePointList = ref([])
@@ -347,8 +341,7 @@ const form = ref({
   options: '',
   answer: '',
   analysis: '',
-  knowledgePointId: null,
-  creatorId: getCreatorId()
+  knowledgePointId: null
 })
 
 const viewForm = ref({
@@ -433,11 +426,9 @@ const handlePageChange = (page) => {
 
 const loadQuestions = async () => {
   try {
-    const currentUser = getUser()
     const params = {
       pageNum: currentPage.value,
-      pageSize: pageSize.value,
-      creatorId: getCreatorId()
+      pageSize: pageSize.value
     }
     if (searchText.value) {
       params.keyword = searchText.value
@@ -459,8 +450,7 @@ const loadQuestions = async () => {
 
 const loadKnowledgePoints = async () => {
   try {
-    const user = getUser()
-    const res = await getKnowledgePointList(user?.id || 1)
+    const res = await getKnowledgePointList()
     if (res.code === 200) {
       knowledgePointList.value = res.data
     }
@@ -477,8 +467,7 @@ const resetForm = () => {
     options: '',
     answer: '',
     analysis: '',
-    knowledgePointId: null,
-    creatorId: getCreatorId()
+    knowledgePointId: null
   }
   optionList.value = [
     { value: '', correct: false },
@@ -659,8 +648,7 @@ const addKnowledgePoint = async () => {
   
   try {
     const res = await createKnowledgePoint({
-      name: newKnowledgePointName.value,
-      creatorId: getCreatorId()
+      name: newKnowledgePointName.value
     })
     
     if (res.code === 200) {
@@ -802,8 +790,7 @@ const addSelectedQuestions = async () => {
         answer: q.answer,
         analysis: q.analysis || '',
         knowledgePointId: q.knowledgePointId || aiForm.value.knowledgePointId,
-        options: q.options || '',
-        creatorId: getCreatorId()
+        options: q.options || ''
       }
       
       const res = await createQuestion(questionData)

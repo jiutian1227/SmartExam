@@ -1,1 +1,0 @@
-import{r as t}from"./request-MMQ9H4tB.js";const n=e=>t.get(`/api/knowledge-point/creator/${e}`),r=e=>t.post("/api/knowledge-point",e),i=e=>t.delete(`/api/knowledge-point/${e}`);export{r as c,i as d,n as g};

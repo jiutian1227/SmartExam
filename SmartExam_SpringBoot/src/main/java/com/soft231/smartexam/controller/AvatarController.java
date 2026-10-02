@@ -3,8 +3,7 @@ package com.soft231.smartexam.controller;
 import com.soft231.smartexam.common.Result;
 import com.soft231.smartexam.entity.User;
 import com.soft231.smartexam.service.UserService;
-import com.soft231.smartexam.util.JwtUtil;
-import jakarta.servlet.http.HttpServletRequest;
+import com.soft231.smartexam.util.SecurityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
@@ -40,12 +39,10 @@ public class AvatarController {
 
     //上传/更换头像
     @PostMapping("/upload")
-    public Result<String> uploadAvatar(
-            @RequestParam("file") MultipartFile file,
-            HttpServletRequest request) {
+    public Result<String> uploadAvatar(@RequestParam("file") MultipartFile file) {
 
-        //从token中获取当前用户
-        Long userId = getUserIdFromToken(request);
+        //从JWT鉴权上下文获取当前用户
+        Long userId = SecurityUtils.getUserId();
         if (userId == null) {
             return Result.error(401, "未登录或登录已过期");
         }
@@ -120,8 +117,8 @@ public class AvatarController {
 
     //删除头像
     @DeleteMapping
-    public Result<Void> deleteAvatar(HttpServletRequest request) {
-        Long userId = getUserIdFromToken(request);
+    public Result<Void> deleteAvatar() {
+        Long userId = SecurityUtils.getUserId();
         if (userId == null) {
             return Result.error(401, "未登录或登录已过期");
         }
@@ -146,25 +143,5 @@ public class AvatarController {
         userService.updateById(user);
 
         return Result.success();
-    }
-
-    //从请求头解析用户ID
-    private Long getUserIdFromToken(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return null;
-        }
-
-        String token = authHeader.substring(7).trim();
-        // 兼容旧格式 token_xxx
-        if (token.startsWith("token_")) {
-            try {
-                return Long.parseLong(token.substring(6));
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }
-        // JWT格式
-        return JwtUtil.getUserId(token);
     }
 }

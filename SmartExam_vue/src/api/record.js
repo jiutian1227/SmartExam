@@ -12,6 +12,11 @@ export const submitExam = (data) => {
   return request.post('/api/records/submit', data)
 }
 
+//保存答题草稿（自动存卷）—— 作答过程中定时上报，交卷前答案在服务端也有留存
+export const saveDraft = (data) => {
+  return request.post('/api/records/draft', data)
+}
+
 export const createRecord = (data) => {
   return request.post('/api/records', data)
 }
@@ -34,23 +39,25 @@ export const getRecordById = (id) => {
   return request.get(`/api/records/${id}`)
 }
 
-//我的成绩列表
-export const getRecordListByUserId = (userId, params = {}) => {
-  return request.get(`/api/records/my/${userId}`, { params })
+//我的成绩列表（当前登录用户，身份从JWT解析）
+export const getRecordListByUserId = (params = {}) => {
+  return request.get('/api/records/my', { params })
 }
 
-export const getMyRecords = (userId) => {
-  return request.get(`/api/records/my/${userId}`)
+export const getMyRecords = (params = {}) => {
+  return request.get('/api/records/my', { params })
 }
 
-//获取用户已提交的考试ID列表
-export const getUserExamIds = (userId) => {
-  return request.get(`/api/records/my/${userId}/exam-ids`)
+//获取当前用户已提交的考试ID列表
+export const getUserExamIds = () => {
+  return request.get('/api/records/my/exam-ids')
 }
 
-//获取用户的考试状态
-export const getExamStatus = (userId, examId) => {
-  return request.get(`/api/records/my/${userId}/exam/${examId}/status`)
+//获取当前用户的考试状态（withAnswers=true 时额外回带已保存的草稿答案）
+export const getExamStatus = (examId, withAnswers = false) => {
+  return request.get(`/api/records/my/exam/${examId}/status`, {
+    params: { withAnswers }
+  })
 }
 
 //获取考试的所有记录（分页）—— 老师批阅时看

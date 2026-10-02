@@ -1,7 +1,7 @@
 import request from '../utils/request'
 
-export const getKnowledgePointList = (creatorId) => {
-  return request.get(`/api/knowledge-point/creator/${creatorId}`)
+export const getKnowledgePointList = () => {
+  return request.get('/api/knowledge-point/my')
 }
 
 export const getAllKnowledgePoints = () => {

@@ -65,7 +65,6 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getRecordListByUserId } from '../../api/record'
-import { getUser } from '../../utils/auth'
 import { formatDateTime } from '../../utils/format'
 import { View, StarFilled } from '@element-plus/icons-vue'
 
@@ -89,15 +88,7 @@ const goToDetail = (id) => {
 const loadScores = async () => {
   loading.value = true
   try {
-    const user = getUser()
-    const userId = user?.id
-    if (!userId) {
-      ElMessage.error('用户未登录')
-      scoreList.value = []
-      total.value = 0
-      return
-    }
-    const res = await getRecordListByUserId(userId, {
+    const res = await getRecordListByUserId({
       pageNum: currentPage.value,
       pageSize: pageSize.value
     })

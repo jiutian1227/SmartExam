@@ -70,7 +70,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { formatDateTime } from '../../utils/format'
 import { getExamList, deleteExam } from '../../api/exam'
-import { getUser, isSuperAdmin } from '../../utils/auth'
+import { isSuperAdmin } from '../../utils/auth'
 
 const router = useRouter()
 
@@ -93,13 +93,9 @@ const handlePageChange = (page) => {
 
 const loadExams = async () => {
   try {
-    const currentUser = getUser()
     const params = {
       pageNum: currentPage.value,
       pageSize: pageSize.value
-    }
-    if (!isSuperAdmin()) {
-      params.creatorId = currentUser?.id
     }
     if (searchText.value) {
       params.keyword = searchText.value

@@ -7,6 +7,16 @@ const request = axios.create({
   timeout: 10000
 })
 
+// 统一处理登录态失效：清本地凭证并跳转登录页
+const redirectToLogin = (message) => {
+  if (!window.location.pathname.startsWith('/login')) {
+    removeToken()
+    removeUser()
+    if (message) ElMessage.error(message)
+    window.location.href = '/login'
+  }
+}
+
 request.interceptors.request.use(
   (config) => {
     const token = getToken()
@@ -22,13 +32,18 @@ request.interceptors.request.use(
 
 request.interceptors.response.use(
   (response) => {
+    // 后端业务码 401：token 过期或无效（Controller 主动返回的情况）
+    if (response.data && response.data.code === 401) {
+      redirectToLogin(response.data.message || '登录已过期，请重新登录')
+      return Promise.reject(response.data)
+    }
     return response.data
   },
   (error) => {
     if (error.response && error.response.status === 401) {
-      removeToken()
-      removeUser()
-      window.location.href = '/login'
+      redirectToLogin(error.response.data?.message || '登录已过期，请重新登录')
+    } else if (error.response && error.response.status === 403) {
+      ElMessage.error(error.response.data?.message || '无权限执行此操作')
     } else if (error.response && error.response.data && error.response.data.message) {
       ElMessage.error(error.response.data.message)
     } else {

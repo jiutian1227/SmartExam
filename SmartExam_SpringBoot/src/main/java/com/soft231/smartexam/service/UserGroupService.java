@@ -1,5 +1,6 @@
 package com.soft231.smartexam.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.soft231.smartexam.entity.UserGroup;
 import com.soft231.smartexam.entity.vo.UserGroupMemberVO;
@@ -29,6 +30,9 @@ public interface UserGroupService extends IService<UserGroup> {
 
     //获取用户组列表（带成员数量，多表查询）
     List<UserGroupVO> listWithMemberCount();
+
+    //获取用户组列表（数据库分页，关键词过滤下推到SQL；creatorId为null时查全部）
+    IPage<UserGroupVO> listWithMemberCount(IPage<UserGroupVO> page, Long creatorId, String keyword);
 
     //获取用户组列表按创建者（带成员数量，多表查询）
     List<UserGroupVO> listWithMemberCount(Long creatorId);

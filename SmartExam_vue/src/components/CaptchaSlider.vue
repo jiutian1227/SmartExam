@@ -317,7 +317,8 @@ const verifyCaptcha = async () => {
       verifyFailed.value = false
       tipText.value = '✓ 验证成功'
       setTimeout(() => {
-        emit('success')
+        // 把验证码token交给父组件，登录时必须携带，服务端会校验其有效性
+        emit('success', token.value)
         close()
       }, 600)
     } else {
