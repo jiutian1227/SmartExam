@@ -1,0 +1,1 @@
+import{r as e}from"./request-BLn8YHYn.js";const n=t=>e.get("/api/question",{params:t}),o=t=>e.post("/api/question",t),i=t=>e.put("/api/question",t),u=t=>e.delete(`/api/question/${t}`),a=t=>e.post("/api/question/ai-generate",t),r=t=>e.post("/api/question/batch",t),p=t=>e.post("/api/solution/generate",t,{timeout:12e4});export{a,r as b,o as c,u as d,p as e,n as g,i as u};

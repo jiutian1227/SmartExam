@@ -3,6 +3,7 @@ package com.soft231.smartexam.controller;
 import com.soft231.smartexam.common.Result;
 import com.soft231.smartexam.entity.User;
 import com.soft231.smartexam.entity.dto.LoginRequest;
+import com.soft231.smartexam.entity.dto.RegisterRequest;
 import com.soft231.smartexam.service.UserService;
 import com.soft231.smartexam.util.SecurityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,10 +32,15 @@ public class AuthController {
         return Result.success(result);
     }
 
-    //用户注册
+    //用户注册（与登录一致：必须携带滑块验证码通过后签发的一次性凭证）
     @PostMapping("/register")
-    public Result<User> register(@RequestBody User user) {
-        User saved = userService.register(user);
+    public Result<User> register(@RequestBody RegisterRequest request) {
+        User user = new User();
+        user.setUsername(request.getUsername());
+        user.setRealName(request.getRealName());
+        user.setPassword(request.getPassword());
+        user.setRole(request.getRole());
+        User saved = userService.register(user, request.getCaptchaToken());
         return Result.success(saved);
     }
 

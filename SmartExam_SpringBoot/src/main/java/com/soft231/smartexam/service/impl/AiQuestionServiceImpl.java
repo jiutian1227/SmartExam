@@ -116,7 +116,7 @@ public class AiQuestionServiceImpl implements AiQuestionService {
 
         Map<String, Object> options = new HashMap<>();
         options.put("temperature", 0.7);
-        options.put("max_tokens", 1000);
+        options.put("num_predict", 4096);
         requestBody.put("options", options);
 
         String jsonBody = objectMapper.writeValueAsString(requestBody);
@@ -199,7 +199,8 @@ public class AiQuestionServiceImpl implements AiQuestionService {
             1. 准确性：学生答案是否准确
             2. 完整性：是否涵盖了所有要点
             3. 逻辑清晰度：表达是否清晰
-            4. 除简答题外，其他题答案错误便是0份
+            4. 除简答题外，填空题答案错误便是0份
+            5. 简答题要按标准答案的思路进行判分
 
             请以JSON格式返回结果，只需要JSON，不要其他文字：
             {

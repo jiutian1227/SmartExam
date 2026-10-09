@@ -38,9 +38,13 @@ public class RecordController {
     private AiQuestionService aiQuestionService;
 
     //创建考试记录（userId一律取JWT身份，不信任前端传参）
+    //与startExam保持一致的可见性校验：不能给无权参加的考试凭空建记录
     @PostMapping
     public Result<ExamRecord> create(@RequestBody ExamRecord record) {
         record.setUserId(SecurityUtils.getUserId());
+        if (record.getExamId() != null) {
+            assertExamAccessible(record.getExamId());
+        }
         ExamRecord saved = examRecordService.createRecord(record);
         return Result.success(saved);
     }
@@ -109,7 +113,7 @@ public class RecordController {
     @GetMapping("/my")
     public Result<Page<ExamRecordVO>> listByUserId(
             @RequestParam(required = false, defaultValue = "1") Integer pageNum,
-            @RequestParam(required = false, defaultValue = "10") Integer pageSize
+            @RequestParam(required = false, defaultValue = "6") Integer pageSize
     ) {
         Long userId = SecurityUtils.getUserId();
         Page<ExamRecordVO> page = new Page<>(pageNum, pageSize);
@@ -149,7 +153,7 @@ public class RecordController {
         return Result.success(page);
     }
 
-    //获取考试记录的答案列表 —— 归属校验同记录详情
+    //获取考试记录的答案列表
     @GetMapping("/{recordId}/answers")
     public Result<List<Map<String, Object>>> getRecordAnswers(@PathVariable Long recordId) {
         assertRecordVisible(recordId);
@@ -201,11 +205,17 @@ public class RecordController {
             @RequestParam(required = false, defaultValue = "1") Integer pageNum,
             @RequestParam(required = false, defaultValue = "10") Integer pageSize
     ) {
-        // creatorId以token身份为准，不信任前端传参
         Long creatorId = SecurityUtils.isSuperAdmin() ? null : SecurityUtils.getUserId();
         Page<ExamSubmissionStatsVO> page = new Page<>(pageNum, pageSize);
         examRecordService.getExamSubmissionStats(page, creatorId);
         return Result.success(page);
+    }
+
+    //批阅统计（全量，不分页）—— 供判卷页顶部汇总卡片使用，教师只看自己创建的考试，超管看全部
+    @GetMapping("/stats/all")
+    public Result<List<ExamSubmissionStatsVO>> getGradingStatsAll() {
+        Long creatorId = SecurityUtils.isSuperAdmin() ? null : SecurityUtils.getUserId();
+        return Result.success(examRecordService.getExamSubmissionStatsList(creatorId));
     }
 
     //删除考试记录 —— 教师/超管，且考试须为自己创建

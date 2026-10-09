@@ -103,7 +103,12 @@ export const getGradingStats = (params = {}) => {
   return request.get('/api/records/stats', { params })
 }
 
-//考试统计（注意：这个接口在ExamController，路径不同）
+//批阅统计（全量，不分页）—— 供判卷页顶部汇总卡片累加使用
+export const getAllGradingStats = () => {
+  return request.get('/api/records/stats/all')
+}
+
+//考试统计（接口在ExamController）
 export const getExamStats = (examId) => {
   return request.get(`/api/exams/${examId}/stats`)
 }

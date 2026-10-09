@@ -4,6 +4,11 @@ export const getGroupList = (params) => {
   return request.get('/api/user-group', { params })
 }
 
+// 全量用户组（不分页）
+export const getAllGroups = () => {
+  return request.get('/api/user-group/all')
+}
+
 export const getGroupById = (id) => {
   return request.get(`/api/user-group/${id}`)
 }

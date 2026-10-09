@@ -15,7 +15,6 @@ ollama:
   model: gemma3:4b
 
 jwt:
-  # 生产环境请通过环境变量覆盖，且不少于32字节
   secret: ${JWT_SECRET:SmartExamSecretKey2026!@#$%%^&*()VeryLongEnough}
   expiration: 86400000 # 24小时
 
@@ -27,5 +26,5 @@ mybatis-plus:
       id-type: auto
 
 upload:
-  # 头像存储目录，与 WebConfig 的静态资源映射共用，改这里即可，两处不会脱节
+  # 头像存储目录
   avatar-path: D:/JavaProjects/Spring/SmartExam/SmartExam_SpringBoot/uploads/avatars

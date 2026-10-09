@@ -65,7 +65,7 @@
               <span v-if="scope.row.score != null" :class="['score-badge', scoreLevel(scope.row.score)]">
                 {{ scope.row.score }} / {{ scope.row.totalScore || 100 }}
               </span>
-              <span v-else class="score-badge pending">待批阅</span>
+              <span v-else class="score-badge pending">-</span>
             </template>
           </el-table-column>
           <el-table-column label="开始时间" width="230">
@@ -116,18 +116,13 @@ const greeting = (() => {
 
 const formatTime = formatDateTime
 
+// 提交状态以"有没有成绩"为判据：有成绩=已提交，没成绩=未提交
 const getExamTagType = (exam) => {
-  const now = new Date()
-  if (now < new Date(exam.startTime)) return 'info'
-  if (now > new Date(exam.endTime)) return 'success'
-  return 'warning'
+  return exam.score != null ? 'success' : 'info'
 }
 
 const getExamStatusLabel = (exam) => {
-  const now = new Date()
-  if (now < new Date(exam.startTime)) return '未开始'
-  if (now > new Date(exam.endTime)) return '已结束'
-  return '进行中'
+  return exam.score != null ? '已提交' : '未提交'
 }
 
 const scoreLevel = (score) => {

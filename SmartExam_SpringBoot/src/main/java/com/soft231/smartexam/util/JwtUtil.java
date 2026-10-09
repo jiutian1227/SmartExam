@@ -29,17 +29,17 @@ public class JwtUtil {
     private static final Logger log = LoggerFactory.getLogger(JwtUtil.class);
 
     /**
-     * 启动自检：提醒默认密钥风险，避免把 yml 里写死的密钥直接带上线
+     * 默认密钥
      */
     @PostConstruct
     public void checkSecretStrength() {
         boolean fromEnv = System.getenv("JWT_SECRET") != null || System.getProperty("JWT_SECRET") != null;
         if (!fromEnv) {
-            log.warn("正在使用 application.yml 中的默认 JWT 密钥，上线前必须通过环境变量 JWT_SECRET 覆盖");
+            log.warn("正在使用application.yml中的默认JWT密钥");
         }
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         if (keyBytes.length < 32) {
-            log.warn("JWT 密钥长度不足 32 字节，签名强度不足，建议更换为更长的随机串");
+            log.warn("JWT密钥长度不足32字节");
         }
     }
 
@@ -50,7 +50,7 @@ public class JwtUtil {
     /**
      * 生成JWT token
      *
-     * 刻意不放 role：角色一律由 JwtAuthenticationFilter 回查数据库取当前值，
+     * 不放 role：角色一律由 JwtAuthenticationFilter 回查数据库取当前值，
      * 放在 token 里会变成签发时刻的快照，管理员改权限后旧 token 收不回来。
      *
      * @param userId   用户ID

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.soft231.smartexam.entity.Exam;
 import com.soft231.smartexam.entity.ExamRecord;
+import com.soft231.smartexam.mapper.AnswerRecordMapper;
 import com.soft231.smartexam.mapper.ExamMapper;
 import com.soft231.smartexam.mapper.ExamRecordMapper;
 import com.soft231.smartexam.service.AnswerRecordService;
@@ -65,6 +66,9 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
 
     @Autowired
     private ExamMapper examMapper;
+
+    @Autowired
+    private AnswerRecordMapper answerRecordMapper;
 
     //获取考试记录的答案列表
     @Override
@@ -307,7 +311,7 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
     /**
      * 把一次完整的答案快照写入 answer_record。
      * 前端每次上报的都是"全部题目"的答案，因此本方法以快照为准：
-     * 有答案的题 upsert，本次未作答的题删除已有草稿行，保证重复上报幂等。
+     * 有答案的题 upsert，本次未作答的题把 user_answer 置空（保留行本身），保证重复上报幂等。
      * 只维护 user_answer 字段，不触碰 score / comment，避免覆盖教师已判的分数。
      */
     private void syncAnswerSnapshot(Long examRecordId, Long examId, String answersJson) {
@@ -343,9 +347,21 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
             AnswerRecord current = existing.get(questionId);
 
             if (answerStr == null) {
-                // 本题本次未作答：清掉已有草稿行，避免旧答案残留
+                // 本题本次未作答：把已有行置空，而不是删除整行。
+                // 删行会让这道题从教师判卷页消失，与"开考预建空行"的设计直接冲突；
+                // 置空则保留题目行，教师能看到"未作答"并正常计 0 分。
                 if (current != null) {
-                    answerRecordService.removeById(current.getId());
+                    if (current.getUserAnswer() != null) {
+                        answerRecordMapper.clearUserAnswer(current.getId());
+                    }
+                } else {
+                    // 老记录（开考时还没预建空行）走到这里：补一条空行，
+                    // 让历史试卷在判卷页同样能显示完整题目清单
+                    AnswerRecord ar = new AnswerRecord();
+                    ar.setExamRecordId(examRecordId);
+                    ar.setQuestionId(questionId);
+                    ar.setUserAnswer(null);
+                    answerRecordService.save(ar);
                 }
             } else if (current != null) {
                 current.setUserAnswer(answerStr);
@@ -394,7 +410,7 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         this.updateRecordStatus(recordId, 2);
     }
 
-    //获取考试提交统计信息（数据库分页）
+    //获取考试提交统计信息（分页）
     @Override
     public IPage<ExamSubmissionStatsVO> getExamSubmissionStats(IPage<ExamSubmissionStatsVO> page, Long creatorId) {
         if (creatorId != null) {
@@ -403,7 +419,16 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         return baseMapper.selectAllExamSubmissionStatsPage(page);
     }
 
-    //获取考试的所有记录（数据库分页）
+    //获取考试提交统计信息（全量，不分页）
+    @Override
+    public List<ExamSubmissionStatsVO> getExamSubmissionStatsList(Long creatorId) {
+        if (creatorId != null) {
+            return baseMapper.selectExamSubmissionStatsByCreatorId(creatorId);
+        }
+        return baseMapper.selectAllExamSubmissionStats();
+    }
+
+    //获取考试的所有记录（分页）
     @Override
     public IPage<ExamRecordVO> getRecordsByExamId(IPage<ExamRecordVO> page, Long examId) {
         return baseMapper.selectRecordsWithUserByExamIdPage(page, examId);
@@ -525,7 +550,9 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
     }
 
     //开始考试
+    //开考 = 建考试记录 + 为试卷每题预建一条空答题记录，两步必须同时成功
     @Override
+    @Transactional
     public ExamRecord startExam(Long userId, Long examId) {
         Exam exam = examMapper.selectById(examId);
         if (exam == null) {
@@ -564,7 +591,34 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         record.setStartTime(java.time.LocalDateTime.now());
         record.setStatus(1);
         this.save(record);
+        // 预建空答题行：保证教师判卷页能拿到完整的题目清单（含学生漏答的题）
+        initAnswerRows(record.getId(), examId);
         return record;
+    }
+
+    /**
+     * 开考时为该试卷的每一道题预建一条空答题记录（user_answer 为 NULL）。
+     * 必要性：批阅查询 selectAnswersWithQuestion 以 answer_record 为主表，
+     * 若只在学生作答时才建行，漏答的题在教师判卷页会凭空消失，
+     * 教师既看不到这道题，也无法区分"学生漏答"与"该题不在卷子里"。
+     * 预建后每道题都有稳定的 answer_record.id，提交分数走的便全是 UPDATE，
+     * 顺带消除了"草稿与提交并发 INSERT 撞 uk_record_question"的隐患。
+     */
+    private void initAnswerRows(Long examRecordId, Long examId) {
+        List<ExamQuestion> examQuestions = examQuestionService.list(
+                new LambdaQueryWrapper<ExamQuestion>().eq(ExamQuestion::getExamId, examId));
+        if (examQuestions.isEmpty()) {
+            return;
+        }
+        List<AnswerRecord> rows = new ArrayList<>();
+        for (ExamQuestion eq : examQuestions) {
+            AnswerRecord ar = new AnswerRecord();
+            ar.setExamRecordId(examRecordId);
+            ar.setQuestionId(eq.getQuestionId());
+            ar.setUserAnswer(null);
+            rows.add(ar);
+        }
+        answerRecordService.saveBatch(rows);
     }
 
     /**
@@ -597,10 +651,15 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
 
             item.put("id", answerId);
 
-            if (type != null && (type == 0 || type == 1 || type == 2 || type == 3)) {
+            // 只判单选(0)/多选(1)/判断(2)。填空(3)与简答(4)表述自由，归为主观题交给 AI 分析
+            if (type != null && (type == 0 || type == 1 || type == 2)) {
                 boolean isCorrect = false;
                 Integer finalScore = 0;
-                if (userAnswer != null && correctAnswer != null && !userAnswer.isEmpty() && !correctAnswer.isEmpty()) {
+                // 客观题缺少标准答案
+                boolean missingAnswer = correctAnswer == null || correctAnswer.trim().isEmpty();
+                // 未作答
+                boolean notAnswered = userAnswer == null || userAnswer.trim().isEmpty();
+                if (!missingAnswer && userAnswer != null && !userAnswer.isEmpty()) {
                     if (type == 1) {
                         String[] userArr = userAnswer.split(",");
                         String[] correctArr = correctAnswer.split(",");
@@ -643,18 +702,8 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
                             }
                         }
                         // 有错选：finalScore保持0
-                    } else if (type == 3) {
-                        String[] userArr = userAnswer.split(",");
-                        String[] correctArr = correctAnswer.split(",");
-                        if (userArr.length == correctArr.length) {
-                            java.util.Arrays.sort(userArr);
-                            java.util.Arrays.sort(correctArr);
-                            isCorrect = String.join(",", userArr).equals(String.join(",", correctArr));
-                            if (isCorrect) {
-                                finalScore = score;
-                            }
-                        }
                     } else {
+                        // 单选(0) / 判断(2)
                         isCorrect = userAnswer.trim().equalsIgnoreCase(correctAnswer.trim());
                         if (isCorrect) {
                             finalScore = score;
@@ -665,6 +714,8 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
                 item.put("score", finalScore);
                 item.put("isObjective", true);
                 item.put("isCorrect", isCorrect);
+                item.put("missingAnswer", missingAnswer);
+                item.put("notAnswered", notAnswered);
             } else {
                 item.put("score", currentScore != null ? currentScore : 0);
                 item.put("isObjective", false);
@@ -678,7 +729,7 @@ public class ExamRecordServiceImpl extends ServiceImpl<ExamRecordMapper, ExamRec
         return result;
     }
 
-    //获取所有考试记录（数据库分页；单条JOIN SQL，替代原先"先查全部再逐条查详情"的N+1写法）
+    //获取所有考试记录
     @Override
     public IPage<ExamRecordVO> getAllRecordsWithInfo(IPage<ExamRecordVO> page) {
         return baseMapper.selectAllRecordsWithInfoPage(page);

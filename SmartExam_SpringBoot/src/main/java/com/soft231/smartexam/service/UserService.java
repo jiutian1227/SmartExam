@@ -32,8 +32,8 @@ public interface UserService extends IService<User> {
      */
     Map<String, Object> login(String username, String password, String captchaToken);
 
-    //用户注册
-    User register(User user);
+    //用户注册（与登录一致：必须携带滑块验证码凭证，服务端核销后才落库）
+    User register(User user, String captchaToken);
 
     //搜索用户
     List<User> searchUsers(String keyword);

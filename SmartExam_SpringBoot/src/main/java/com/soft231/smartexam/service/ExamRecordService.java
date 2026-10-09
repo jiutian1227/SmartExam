@@ -67,6 +67,9 @@ public interface ExamRecordService extends IService<ExamRecord> {
     //获取考试提交统计信息（数据库分页）
     IPage<ExamSubmissionStatsVO> getExamSubmissionStats(IPage<ExamSubmissionStatsVO> page, Long creatorId);
 
+    //获取考试提交统计信息（全量，不分页）—— 供顶部汇总卡片累加使用，避免前端用超大pageSize伪全量
+    List<ExamSubmissionStatsVO> getExamSubmissionStatsList(Long creatorId);
+
     //获取考试的所有记录（数据库分页）
     IPage<ExamRecordVO> getRecordsByExamId(IPage<ExamRecordVO> page, Long examId);
 

@@ -61,7 +61,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { getUser } from '../../utils/auth'
-import { getGroupList } from '../../api/group'
+import { getAllGroups } from '../../api/group'
 import { getExamList } from '../../api/exam'
 import { getQuestionList } from '../../api/question'
 import { getGradingStats } from '../../api/record'
@@ -91,7 +91,7 @@ const loadData = async () => {
   try {
     // 列表数据已由后端按JWT身份过滤（教师仅本人，超管全部），无需前端再筛
     const [groupRes, examRes, questionRes, gradingStatsRes] = await Promise.all([
-      getGroupList(),
+      getAllGroups(),
       getExamList({ pageNum: 1, pageSize: 100 }),
       getQuestionList({ pageNum: 1, pageSize: 100 }),
       getGradingStats({ pageNum: 1, pageSize: 100 })

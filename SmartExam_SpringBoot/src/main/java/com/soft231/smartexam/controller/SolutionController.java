@@ -13,6 +13,9 @@ import java.util.Map;
 @RequestMapping("/api/solution")
 public class SolutionController {
 
+    /** 单个文本入参的最大长度，防止超长内容拼进Prompt刷爆AI资源 */
+    private static final int MAX_TEXT_LENGTH = 2000;
+
     @Autowired
     private SolutionService solutionService;
 
@@ -34,6 +37,23 @@ public class SolutionController {
             }
             if (type == null) {
                 return Result.error("题目类型不能为空");
+            }
+            // 该接口开放给全体登录学生查看已批阅成绩时要看解析
+            // 入参会直接拼进大模型Prompt，必须限制长度，防止超长文本刷爆AI资源
+            if (questionContent.length() > MAX_TEXT_LENGTH) {
+                return Result.error("题目内容不能超过" + MAX_TEXT_LENGTH + "字");
+            }
+            if (options != null && options.length() > MAX_TEXT_LENGTH) {
+                return Result.error("选项内容过长");
+            }
+            if (correctAnswer != null && correctAnswer.length() > MAX_TEXT_LENGTH) {
+                return Result.error("参考答案过长");
+            }
+            if (studentAnswer != null && studentAnswer.length() > MAX_TEXT_LENGTH) {
+                return Result.error("作答内容过长");
+            }
+            if (existingAnalysis != null && existingAnalysis.length() > MAX_TEXT_LENGTH) {
+                return Result.error("已有解析过长");
             }
 
             Map<String, Object> result = solutionService.generateSolution(

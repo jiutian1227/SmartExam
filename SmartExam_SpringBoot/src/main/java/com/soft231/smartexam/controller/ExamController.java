@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.soft231.smartexam.common.Result;
 import com.soft231.smartexam.entity.Exam;
 import com.soft231.smartexam.entity.ExamQuestion;
+import com.soft231.smartexam.entity.ExamRecord;
 import com.soft231.smartexam.entity.vo.ExamStatsVO;
 import com.soft231.smartexam.service.ExamQuestionService;
 import com.soft231.smartexam.service.ExamRecordService;
@@ -78,9 +79,17 @@ public class ExamController {
     }
 
     //删除考试 —— 教师只能删自己创建的考试，超管不限
+    //已产生作答记录的考试一律禁止删除：外键为ON DELETE CASCADE，删库会连带清空所有学生的答题与成绩
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         assertExamOwner(id);
+        Long recordCount = examRecordService.lambdaQuery()
+                .eq(ExamRecord::getExamId, id)
+                .count();
+        if (recordCount != null && recordCount > 0) {
+            return Result.error(400, "该考试已有 " + recordCount
+                    + " 份学生作答记录，删除会一并清空其答题与成绩，禁止删除");
+        }
         examService.removeById(id);
         return Result.success();
     }
@@ -130,26 +139,29 @@ public class ExamController {
         return Result.success(questions);
     }
 
-    //向考试添加题目
+    //向考试添加题目 —— 已有人作答后禁止再改结构
     @PostMapping("/{examId}/questions")
     public Result<?> addQuestionToExam(@PathVariable Long examId, @RequestBody Map<String, Object> body) {
         assertExamOwner(examId);
+        assertExamEditable(examId);
         ExamQuestion eq = examQuestionService.addQuestionToExam(examId, body);
         return Result.success(Map.of("id", eq.getId()));
     }
 
-    //更新题目在考试中的分数
+    //更新题目在考试中的分数 —— 已有人作答后禁止再改分值，否则同一份答卷会出现两套评分口径
     @PutMapping("/{examId}/questions/score")
     public Result<?> updateQuestionScore(@PathVariable Long examId, @RequestBody Map<String, Object> body) {
         assertExamOwner(examId);
+        assertExamEditable(examId);
         examQuestionService.updateQuestionScore(examId, body);
         return Result.success();
     }
 
-    //从考试中移除题目
+    //从考试中移除题目 —— 已有人作答后禁止移除，否则学生已提交的该题答案会成为无主数据
     @DeleteMapping("/{examId}/questions/{questionId}")
     public Result<?> removeQuestionFromExam(@PathVariable Long examId, @PathVariable Long questionId) {
         assertExamOwner(examId);
+        assertExamEditable(examId);
         boolean removed = examQuestionService.removeQuestionFromExam(examId, questionId);
         return Result.success(removed);
     }
@@ -159,6 +171,19 @@ public class ExamController {
     public Result<ExamStatsVO> getExamStats(@PathVariable Long examId) {
         assertExamOwner(examId);
         return Result.success(examRecordService.getExamStats(examId));
+    }
+
+    /**
+     * 校验试卷结构可否改动：只要已有学生开始作答（含"进行中"的草稿记录），就禁止增删题目与调整分值。
+     * 否则会出现三种错乱：学生已存答案与题目清单对不上、批阅时缺少该题分值、同一份答卷存在两套评分口径。
+     */
+    private void assertExamEditable(Long examId) {
+        Long recordCount = examRecordService.lambdaQuery()
+                .eq(ExamRecord::getExamId, examId)
+                .count();
+        if (recordCount != null && recordCount > 0) {
+            throw new IllegalArgumentException("已有学生开始作答，禁止增删题目或修改分值");
+        }
     }
 
     /**

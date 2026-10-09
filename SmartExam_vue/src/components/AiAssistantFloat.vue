@@ -333,7 +333,7 @@ const sendMessage = async () => {
 
     clearTimeout(timeoutId)
 
-    // JWT鉴权失败：清理本地凭证并跳转登录页，避免停留在无token的空会话
+    // JWT鉴权失败
     if (response.status === 401 || response.status === 403) {
       removeToken()
       removeUser()

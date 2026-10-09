@@ -97,7 +97,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, View, Files } from '@element-plus/icons-vue'
-import { getGradingStats } from '../../api/record'
+import { getGradingStats, getAllGradingStats } from '../../api/record'
 import { isSuperAdmin } from '../../utils/auth'
 
 const router = useRouter()
@@ -125,17 +125,20 @@ const goBack = () => {
 
 const loadGradingStats = async () => {
   try {
-    const res = await getGradingStats({
-      pageNum: currentPage.value,
-      pageSize: pageSize.value
-    })
+    // 表格走分页接口，顶部汇总卡片走全量接口
+    const [res, allRes] = await Promise.all([
+      getGradingStats({
+        pageNum: currentPage.value,
+        pageSize: pageSize.value
+      }),
+      getAllGradingStats()
+    ])
     if (res.code === 200) {
       examList.value = res.data.records || []
       total.value = res.data.total || 0
-      const allRes = await getGradingStats({ pageNum: 1, pageSize: 10000 })
-      if (allRes.code === 200) {
-        allExams.value = allRes.data.records || []
-      }
+    }
+    if (allRes.code === 200) {
+      allExams.value = allRes.data || []
     }
   } catch (error) {
     ElMessage.error('加载判卷统计失败')

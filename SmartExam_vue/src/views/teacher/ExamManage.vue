@@ -29,15 +29,15 @@
       <el-table v-else :data="examList" border>
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="title" label="考试名称" width="200" />
-        <el-table-column prop="description" label="描述" width="200" />
+        <el-table-column prop="description" label="描述" width="250" />
         <el-table-column label="考试时间" width="220">
           <template #default="scope">
             {{ formatDateTime(scope.row.startTime) }} ~ {{ formatDateTime(scope.row.endTime) }}
           </template>
         </el-table-column>
-        <el-table-column prop="duration" label="时长(分钟)" width="150" />
-        <el-table-column prop="totalScore" label="总分" width="100" />
-        <el-table-column label="操作" width="240">
+        <el-table-column prop="duration" label="时长(分钟)" width="170" />
+        <el-table-column prop="totalScore" label="总分" width="120" />
+        <el-table-column label="操作">
           <template #default="scope">
             <el-button v-if="!isSuperAdmin()" size="default" type="primary" :icon="Edit" @click="goToEdit(scope.row)">
               编辑
@@ -117,7 +117,7 @@ const goToEdit = (row) => {
 
 const handleDeleteExam = (row) => {
   ElMessageBox.confirm(
-    '此操作将永久删除该考试, 是否继续?',
+    '确定删除该考试？若已有学生作答记录，系统会拒绝删除以保护成绩数据。',
     '提示',
     {
       confirmButtonText: '确定',

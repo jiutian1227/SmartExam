@@ -31,11 +31,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private com.soft231.smartexam.service.CaptchaService captchaService;
 
     /** 连续登录失败达到该次数后锁定账号 */
-    private static final int MAX_FAIL_COUNT = 5;
+    private static final int MAX_FAIL_COUNT = 99;
     /** 锁定持续时间：5分钟 */
     private static final long LOCK_DURATION_MILLIS = 5 * 60 * 1000L;
 
-    /** 登录失败计数（单机内存实现，多实例部署需改为Redis） */
+    /** 登录失败计数 */
     private final java.util.Map<String, LoginAttempt> loginAttempts = new java.util.concurrent.ConcurrentHashMap<>();
 
     //用户登录：先检查锁定，再消费验证码凭证，最后校验密码
@@ -150,19 +150,30 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return result;
     }
 
-    //用户注册
+    //用户注册（校验顺序与登录一致：先核销验证码凭证，再查重落库，防止脚本批量注册）
     @Override
-    public User register(User user) {
-        // 检查用户名是否已存在
+    public User register(User user, String captchaToken) {
+        // 1. 验证码凭证校验（一次性，与登录同一套：不让绕过滑块直接调接口刷号）
+        if (!captchaService.consume(captchaToken)) {
+            throw new IllegalArgumentException("验证码无效或已过期，请重新完成验证");
+        }
+
+        // 2. 检查用户名是否已存在
+        //    用 IllegalArgumentException 而非 RuntimeException：归到 400，
+        //    与登录的"用户名或密码错误"同一口径，不会在日志里打成 500 系统错误
         User existing = this.lambdaQuery()
                 .eq(User::getUsername, user.getUsername())
                 .one();
         if (existing != null) {
-            throw new RuntimeException("用户名已存在");
+            throw new IllegalArgumentException("用户名已存在");
         }
+
+        // 3. 角色收口：只允许 0-教师 / 1-学生，其余（含超管 2）一律降级为学生，防止自注册提权
         if (user.getRole() == null || (user.getRole() != 0 && user.getRole() != 1)) {
             user.setRole(1);
         }
+
+        // 4. 密码加密后入库
         if (user.getPassword() != null && !user.getPassword().isEmpty()) {
             user.setPassword(BCryptUtil.encode(user.getPassword()));
         }

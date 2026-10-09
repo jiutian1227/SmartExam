@@ -44,6 +44,9 @@ request.interceptors.response.use(
       redirectToLogin(error.response.data?.message || '登录已过期，请重新登录')
     } else if (error.response && error.response.status === 403) {
       ElMessage.error(error.response.data?.message || '无权限执行此操作')
+    } else if (error.code === 'ECONNABORTED' || !error.response) {
+      // 请求超时或连不上服务：统一按"连接超时"提示，不做其它猜测
+      ElMessage.error('连接超时，请检查服务是否可用')
     } else if (error.response && error.response.data && error.response.data.message) {
       ElMessage.error(error.response.data.message)
     } else {

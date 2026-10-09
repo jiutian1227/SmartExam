@@ -3,6 +3,7 @@ package com.soft231.smartexam.config;
 import com.soft231.smartexam.common.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -37,6 +38,17 @@ public class GlobalExceptionHandler {
     public Result<Void> handleRuntimeException(RuntimeException e) {
         log.error("业务运行时异常", e);
         return Result.error(e.getMessage());
+    }
+
+    /**
+     * 处理数据库约束冲突（外键RESTRICT、唯一索引重复）：业务层引用校验被绕过时的最后兜底。
+     * 只回传可读原因，原始异常里的SQL与约束名只写日志，不外泄
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public Result<Void> handleDataIntegrityViolationException(DataIntegrityViolationException e) {
+        log.warn("数据库约束冲突", e);
+        return Result.error(409, "该数据已被其他业务引用，无法执行此操作");
     }
 
     /**

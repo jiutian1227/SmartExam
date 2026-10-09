@@ -20,8 +20,14 @@ export const deleteQuestion = (id) => {
   return request.delete(`/api/question/${id}`)
 }
 
+//AI生成题目（不单独设置timeout，超时时长由服务端决定，前端只负责提示）
 export const aiGenerateQuestions = (data) => {
   return request.post('/api/question/ai-generate', data)
+}
+
+//批量入库题目（AI出题勾选后一次性落库，后端事务保证原子性）
+export const batchCreateQuestions = (list) => {
+  return request.post('/api/question/batch', list)
 }
 
 //AI生成题解

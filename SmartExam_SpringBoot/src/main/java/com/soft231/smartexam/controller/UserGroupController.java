@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.Objects;
 
 //用户组管理控制器
-//群组CRUD：创建 create / 详情 getById / 更新 update / 删除 delete / 列表 list
+//群组CRUD：创建 create / 详情 getById / 更新 update / 删除 delete / 列表 list / 全量列表 listAll
 //成员管理：获取成员列表 getMembers / 添加成员 addMember / 移除成员 removeMember
 //加入离开：加入群组 join / 离开群组 leave / 通过分享码加入 joinByShareCode / 已加入群组列表 getMyGroups
 //分享码管理：刷新分享码 refreshShareCode / 根据分享码查询 getByShareCode
@@ -39,6 +39,13 @@ public class UserGroupController {
         userGroup.setCreatorId(SecurityUtils.getUserId());
         UserGroup saved = userGroupService.createGroup(userGroup);
         return Result.success(saved);
+    }
+
+    //获取用户组全量列表（不分页）—— 供下拉框、数量统计等需要枚举全部选项的场景使用
+    @GetMapping("/all")
+    public Result<List<UserGroupVO>> listAll() {
+        Long creatorId = SecurityUtils.isSuperAdmin() ? null : SecurityUtils.getUserId();
+        return Result.success(userGroupService.listWithMemberCount(creatorId));
     }
 
     //根据ID查询用户组详情 —— 仅创建者、成员、超级管理员可见

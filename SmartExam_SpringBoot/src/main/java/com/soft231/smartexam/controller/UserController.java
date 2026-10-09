@@ -1,7 +1,17 @@
 package com.soft231.smartexam.controller;
 
 import com.soft231.smartexam.common.Result;
+import com.soft231.smartexam.entity.Exam;
+import com.soft231.smartexam.entity.ExamRecord;
+import com.soft231.smartexam.entity.KnowledgePoint;
+import com.soft231.smartexam.entity.Question;
 import com.soft231.smartexam.entity.User;
+import com.soft231.smartexam.entity.UserGroup;
+import com.soft231.smartexam.service.ExamRecordService;
+import com.soft231.smartexam.service.ExamService;
+import com.soft231.smartexam.service.KnowledgePointService;
+import com.soft231.smartexam.service.QuestionService;
+import com.soft231.smartexam.service.UserGroupService;
 import com.soft231.smartexam.service.UserService;
 import com.soft231.smartexam.util.SecurityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +28,21 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private ExamRecordService examRecordService;
+
+    @Autowired
+    private ExamService examService;
+
+    @Autowired
+    private QuestionService questionService;
+
+    @Autowired
+    private KnowledgePointService knowledgePointService;
+
+    @Autowired
+    private UserGroupService userGroupService;
 
     //创建用户
     @PostMapping
@@ -54,9 +79,37 @@ public class UserController {
         return Result.success(user);
     }
 
-    //删除用户
+    //删除用户 —— 仅超管可用（SecurityConfig控制）
+    //用户是被多方引用的根实体，数据库外键对"考试记录/创建关系"均为RESTRICT：
+    //这里先做引用校验给出可读提示，避免请求直接被数据库拒绝后返回409
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
+        Long recordCount = examRecordService.lambdaQuery()
+                .eq(ExamRecord::getUserId, id).count();
+        if (recordCount != null && recordCount > 0) {
+            return Result.error(400, "该用户已有 " + recordCount
+                    + " 份考试记录，删除会导致成绩无法追溯，禁止删除");
+        }
+        Long examCount = examService.lambdaQuery()
+                .eq(Exam::getCreatorId, id).count();
+        if (examCount != null && examCount > 0) {
+            return Result.error(400, "该用户创建了 " + examCount + " 场考试，请先删除或转移后再删除该用户");
+        }
+        Long questionCount = questionService.lambdaQuery()
+                .eq(Question::getCreatorId, id).count();
+        if (questionCount != null && questionCount > 0) {
+            return Result.error(400, "该用户创建了 " + questionCount + " 道题目，请先删除或转移后再删除该用户");
+        }
+        Long kpCount = knowledgePointService.lambdaQuery()
+                .eq(KnowledgePoint::getCreatorId, id).count();
+        if (kpCount != null && kpCount > 0) {
+            return Result.error(400, "该用户创建了 " + kpCount + " 个知识点，请先删除或转移后再删除该用户");
+        }
+        Long groupCount = userGroupService.lambdaQuery()
+                .eq(UserGroup::getCreatorId, id).count();
+        if (groupCount != null && groupCount > 0) {
+            return Result.error(400, "该用户创建了 " + groupCount + " 个用户组，请先删除或转移后再删除该用户");
+        }
         userService.deleteUser(id);
         return Result.success();
     }

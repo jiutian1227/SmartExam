@@ -92,7 +92,7 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import { getUser, isSuperAdmin } from '../../utils/auth'
-import { getGroupList } from '../../api/group'
+import { getAllGroups } from '../../api/group'
 import { getExamList } from '../../api/exam'
 import { getQuestionList } from '../../api/question'
 import { getGradingStats } from '../../api/record'
@@ -175,7 +175,7 @@ const loadData = async () => {
       getUserList(),
       getExamList({ pageNum: 1, pageSize: 100 }),
       getQuestionList({ pageNum: 1, pageSize: 100 }),
-      getGroupList(),
+      getAllGroups(),
       getGradingStats({ pageNum: 1, pageSize: 100 })
     ])
     if (userRes.code === 200) {

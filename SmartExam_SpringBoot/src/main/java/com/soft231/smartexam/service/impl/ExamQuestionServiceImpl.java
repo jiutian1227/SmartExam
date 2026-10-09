@@ -8,6 +8,7 @@ import com.soft231.smartexam.service.ExamQuestionService;
 import com.soft231.smartexam.service.QuestionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -64,25 +65,37 @@ public class ExamQuestionServiceImpl extends ServiceImpl<ExamQuestionMapper, Exa
             result.add(item);
         }
 
-        // 尊重教师在试卷中设置的题目顺序，序号相同时再按题型归组
+        // 尊重教师在试卷中设置的题目顺序：先按序号，序号相同再按题型归组，
+        // 最后用题目 id 兜底 —— 保证排序结果完全确定，不会因 MySQL 返回顺序不稳定而前后两次刷新看到不同题序
         result.sort(Comparator
                 .comparingInt((Map<String, Object> a) -> (Integer) a.get("sortOrder"))
-                .thenComparingInt(a -> (Integer) a.get("type")));
+                .thenComparingInt(a -> (Integer) a.get("type"))
+                .thenComparingLong(a -> ((Number) a.get("id")).longValue()));
         return result;
     }
 
     //向考试添加题目
+    //sort_order（题目在试卷中的展示序号）由服务端按「当前最大序号 + 1」计算：
+    //前端原先用「已选题数量」当序号，删除中间某题后序号会出现空洞，再次加题就会与已有题撞号，
+    //撞号时排序退化为按题型兜底，题目顺序不再稳定。改由服务端取 max+1 可彻底避免。
     @Override
     public ExamQuestion addQuestionToExam(Long examId, Map<String, Object> body) {
         Long questionId = ((Number) body.get("questionId")).longValue();
         Integer score = body.get("score") != null ? ((Number) body.get("score")).intValue() : 10;
-        Integer sortOrder = body.get("sortOrder") != null ? ((Number) body.get("sortOrder")).intValue() : 0;
+
+        int nextSort = this.lambdaQuery()
+                .eq(ExamQuestion::getExamId, examId)
+                .list()
+                .stream()
+                .mapToInt(eq -> eq.getSortOrder() == null ? 0 : eq.getSortOrder())
+                .max()
+                .orElse(-1) + 1;
 
         ExamQuestion examQuestion = new ExamQuestion();
         examQuestion.setExamId(examId);
         examQuestion.setQuestionId(questionId);
         examQuestion.setScore(score);
-        examQuestion.setSortOrder(sortOrder);
+        examQuestion.setSortOrder(nextSort);
 
         this.save(examQuestion);
         return examQuestion;
@@ -102,11 +115,29 @@ public class ExamQuestionServiceImpl extends ServiceImpl<ExamQuestionMapper, Exa
     }
 
     //从考试中移除题目
+    //移除后对剩余题目重新编号（0,1,2...连续），消除序号空洞，保证"第几题"与题号始终一一对应
     @Override
+    @Transactional
     public boolean removeQuestionFromExam(Long examId, Long questionId) {
-        return this.lambdaUpdate()
+        boolean removed = this.lambdaUpdate()
                 .eq(ExamQuestion::getExamId, examId)
                 .eq(ExamQuestion::getQuestionId, questionId)
                 .remove();
+
+        if (removed) {
+            List<ExamQuestion> rest = this.lambdaQuery()
+                    .eq(ExamQuestion::getExamId, examId)
+                    .orderByAsc(ExamQuestion::getSortOrder)
+                    .orderByAsc(ExamQuestion::getId)
+                    .list();
+            for (int i = 0; i < rest.size(); i++) {
+                ExamQuestion eq = rest.get(i);
+                if (!Objects.equals(eq.getSortOrder(), i)) {
+                    eq.setSortOrder(i);
+                    this.updateById(eq);
+                }
+            }
+        }
+        return removed;
     }
 }

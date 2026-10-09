@@ -1,1 +1,0 @@
-import{r as e}from"./request-CAATgm_Q.js";const o=()=>e.get("/api/knowledge-point/my"),i=()=>e.get("/api/knowledge-point/all"),l=t=>e.post("/api/knowledge-point",t),r=t=>e.delete(`/api/knowledge-point/${t}`);export{o as a,l as c,r as d,i as g};

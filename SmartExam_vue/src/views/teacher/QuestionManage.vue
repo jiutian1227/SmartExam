@@ -188,7 +188,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="题目数量">
-          <el-input-number v-model="aiForm.count" :min="1" :max="20" />
+          <el-input-number v-model="aiForm.count" :min="1" :max="5" />
         </el-form-item>
         <el-form-item label="知识点" required>
           <el-select v-model="aiForm.knowledgePointId" placeholder="请选择知识点" style="width: 100%" :disabled="knowledgePointList.length === 0">
@@ -317,7 +317,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Edit, View, Delete } from '@element-plus/icons-vue'
 import { formatDateTime } from '../../utils/format'
-import { getQuestionList, createQuestion, updateQuestion, deleteQuestion, aiGenerateQuestions } from '../../api/question'
+import { getQuestionList, createQuestion, updateQuestion, deleteQuestion, aiGenerateQuestions, batchCreateQuestions } from '../../api/question'
 import { getKnowledgePointList, createKnowledgePoint, deleteKnowledgePoint as deleteKP } from '../../api/knowledgePoint'
 import { isSuperAdmin } from '../../utils/auth'
 
@@ -554,7 +554,7 @@ const viewQuestion = (row) => {
 
 const handleDeleteQuestion = (row) => {
   ElMessageBox.confirm(
-    '此操作将永久删除该题目, 是否继续?',
+    '确定删除该题目？若已被试卷选用或已被学生作答，系统会拒绝删除，请先从试卷中移除。',
     '提示',
     {
       confirmButtonText: '确定',
@@ -763,8 +763,8 @@ const generateQuestions = async () => {
       ElMessage.error(res.message || '生成题目失败')
     }
   } catch (error) {
+    // 超时或连不上服务时，request 拦截器已统一提示"连接超时"，这里不重复弹窗
     console.error('生成题目失败', error)
-    ElMessage.error('生成题目失败，请确保Ollama服务已启动并运行gemma3:4b模型')
   } finally {
     generating.value = false
   }
@@ -781,34 +781,28 @@ const addSelectedQuestions = async () => {
     return
   }
 
-  let successCount = 0
-  for (const q of selected) {
-    try {
-      const questionData = {
-        type: q.type,
-        content: q.content,
-        answer: q.answer,
-        analysis: q.analysis || '',
-        knowledgePointId: q.knowledgePointId || aiForm.value.knowledgePointId,
-        options: q.options || ''
-      }
-      
-      const res = await createQuestion(questionData)
-      if (res.code === 200) {
-        successCount++
-      }
-    } catch (error) {
-      console.error('添加题目失败', error)
-    }
-  }
+  // 一次性批量入库：后端事务保证要么全进要么全回滚，不会留下"只加了一半"
+  const questionList = selected.map(q => ({
+    type: q.type,
+    content: q.content,
+    answer: q.answer,
+    analysis: q.analysis || '',
+    knowledgePointId: q.knowledgePointId || aiForm.value.knowledgePointId,
+    options: q.options || ''
+  }))
 
-  if (successCount > 0) {
-    ElMessage.success(`成功添加 ${successCount} 道题目`)
-    showAiModal.value = false
-    resetAiForm()
-    loadQuestions()
-  } else {
-    ElMessage.error('添加题目失败')
+  try {
+    const res = await batchCreateQuestions(questionList)
+    if (res.code === 200) {
+      ElMessage.success(`成功添加 ${res.data.count} 道题目`)
+      showAiModal.value = false
+      resetAiForm()
+      loadQuestions()
+    } else {
+      ElMessage.error(res.message || '添加题目失败')
+    }
+  } catch (error) {
+    console.error('添加题目失败', error)
   }
 }
 

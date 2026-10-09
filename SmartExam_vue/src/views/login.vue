@@ -365,8 +365,8 @@ const handleLogin = async () => {
       ElMessage.error(response.message || '登录失败')
     }
   } catch (error) {
-    // 400（验证码失效 / 用户名或密码错误 / 账号锁定）的具体原因已由 request 拦截器弹出，此处不重复提示
-    if (!error?.response) {
+    // 表单校验失败（reject false）不算网络异常；400 的具体原因已由 request 拦截器弹出
+    if (error !== false && !error?.response) {
       ElMessage.error('网络异常，请检查网络连接后重试')
     }
   } finally {

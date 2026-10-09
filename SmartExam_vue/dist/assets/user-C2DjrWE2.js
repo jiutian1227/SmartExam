@@ -1,1 +1,0 @@
-import{r}from"./request-CAATgm_Q.js";const s=e=>r.get("/api/user",{params:e}),u=e=>r.get(`/api/user/${e}`),o=e=>r.post("/api/user",e),p=e=>r.put("/api/user",e),n=e=>r.delete(`/api/user/${e}`),c=e=>{const t=new FormData;return t.append("file",e),r.post("/api/avatar/upload",t)};export{s as a,c as b,o as c,n as d,u as g,p as u};

@@ -215,6 +215,8 @@ const form = reactive({
 })
 const isVerified = ref(false)
 const showVcode = ref(false)
+// 滑块验证码通过后签发的一次性凭证，注册请求必须携带（与登录同一套校验）
+const captchaToken = ref('')
 
 // 背景题目数据
 const backgroundQuestions = [
@@ -434,7 +436,8 @@ const handleRegister = async () => {
       username: form.username,
       realName: form.realName,
       password: form.password,
-      role: form.role
+      role: form.role,
+      captchaToken: captchaToken.value
     }
 
     const response = await register(submitData)
@@ -445,9 +448,13 @@ const handleRegister = async () => {
       ElMessage.error(response.message || '注册失败')
     }
   } catch (error) {
-    if (error !== false) {
+    // 表单校验失败（reject false）不算网络异常；接口报错的具体原因已由 request 拦截器弹出
+    if (error !== false && !error?.response) {
       ElMessage.error('网络异常，请检查网络连接后重试')
     }
+  } finally {
+    // 凭证一次性：无论成败都作废，下次注册必须重新完成滑块验证
+    captchaToken.value = ''
   }
 }
 
@@ -496,8 +503,10 @@ const handleRegisterBtnClick = () => {
   showVcode.value = true
 }
 
-const onCaptchaSuccess = async () => {
+const onCaptchaSuccess = async (token) => {
   showVcode.value = false
+  // 保存服务端签发的验证码凭证，注册时一并提交
+  captchaToken.value = token || ''
   await handleRegister()
 }
 

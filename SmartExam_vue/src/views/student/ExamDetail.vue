@@ -328,8 +328,20 @@ const answeredCount = computed(() => {
   return Object.values(answers.value).filter(a => a !== undefined && a !== '').length
 })
 
+// 题号按最终展示顺序（题型分组后）连续编号。
+// 原实现取 questions 数组下标，而页面是按题型分组渲染的：若教师加题时题型交错，
+// 学生看到的题号会跳（如 1、3、4、5 然后 2）。改成按分组后的真实顺序编号即可对齐。
+const questionNumberMap = computed(() => {
+  const map = {}
+  let n = 0
+  typeGroups.value.forEach(group => {
+    group.list.forEach(q => { map[q.id] = ++n })
+  })
+  return map
+})
+
 const getQuestionNumber = (question) => {
-  return questions.value.findIndex(q => q.id === question.id) + 1
+  return questionNumberMap.value[question.id] || 0
 }
 
 const getTypeLabel = (type) => {
@@ -553,7 +565,7 @@ const syncRemainFromServer = async () => {
     if (typeof record.serverTime === 'number') {
       serverTimeOffset = record.serverTime - Date.now()
     }
-    // 顺带上报一次答题草稿：复用这条 30 秒心跳，不必为自动存卷单开定时器
+    // 顺带上报一次答题草稿
     await saveDraftToServer()
     if (record.status === 2) {
       clearInterval(timer)

@@ -249,7 +249,7 @@ import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 import { getExamById, createExam, updateExam, getExamQuestions, addQuestionToExam, removeQuestionFromExam, updateQuestionScore } from '../../api/exam'
 import { getQuestionList } from '../../api/question'
-import { getGroupList } from '../../api/group'
+import { getAllGroups } from '../../api/group'
 import { getKnowledgePointList } from '../../api/knowledgePoint'
 import { ArrowLeft } from '@element-plus/icons-vue'
 
@@ -363,11 +363,12 @@ const goBack = () => {
   router.push('/admin/exam')
 }
 
+// 下拉框需要枚举全部用户组，走不分页的 /all，避免只显示第一页
 const loadGroups = async () => {
   try {
-    const res = await getGroupList()
+    const res = await getAllGroups()
     if (res.code === 200) {
-      groupList.value = res.data.records || []
+      groupList.value = res.data || []
     }
   } catch (error) {
     console.error('加载用户组列表失败', error)
@@ -482,8 +483,8 @@ const handleAddQuestion = async (question) => {
   try {
     const res = await addQuestionToExam(examId.value, {
       questionId: question.id,
-      score: perScore,
-      sortOrder: selectedQuestions.value.length
+      // sort_order 由服务端按「当前最大序号+1」计算，前端不传，避免删题后序号撞号
+      score: perScore
     })
 
     if (res.code === 200) {

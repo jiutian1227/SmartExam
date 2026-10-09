@@ -44,7 +44,7 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="开放用户组（必选）">
+              <el-form-item label="开放用户组">
                 <el-select v-model="form.selectedGroupIds" multiple placeholder="选择可参加考试的用户组" style="width: 100%">
                   <el-option
                     v-for="group in groupList"
@@ -199,10 +199,10 @@
               <div class="bank-header">
                 <div class="header-left">
                   <span>题目列表（点击添加）</span>
-                  <el-select v-model="selectedType" placeholder="按题型筛选" clearable style="width: 140px; margin-left: 16px">
+                  <el-select v-model="selectedType" placeholder="按题型筛选" clearable style="width: 140px; margin-left: 16px" @change="onQuestionFilterChange">
                     <el-option v-for="type in typeOptions" :key="type.value" :value="type.value" :label="type.label" />
                   </el-select>
-                  <el-select v-model="selectedKnowledgePoint" placeholder="按知识点筛选" clearable style="width: 180px; margin-left: 16px" @change="filterQuestions">
+                  <el-select v-model="selectedKnowledgePoint" placeholder="按知识点筛选" clearable style="width: 180px; margin-left: 16px" @change="onQuestionFilterChange">
                     <el-option v-for="kp in knowledgePointList" :key="kp.id" :value="kp.id" :label="kp.name" />
                   </el-select>
                 </div>
@@ -229,6 +229,18 @@
                   </template>
                 </el-table-column>
               </el-table>
+
+              <div class="bank-pagination">
+                <el-pagination
+                  v-model:current-page="questionPageNum"
+                  v-model:page-size="questionPageSize"
+                  :page-sizes="[10, 20, 50]"
+                  :total="questionTotal"
+                  layout="total, sizes, prev, pager, next"
+                  @size-change="handleQuestionSizeChange"
+                  @current-change="handleQuestionPageChange"
+                />
+              </div>
             </div>
           </el-tab-pane>
         </el-tabs>
@@ -252,7 +264,7 @@ import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 import { getExamById, createExam, updateExam, getExamQuestions, addQuestionToExam, removeQuestionFromExam, updateQuestionScore } from '../../api/exam'
 import { getQuestionList } from '../../api/question'
-import { getGroupList } from '../../api/group'
+import { getAllGroups } from '../../api/group'
 import { getKnowledgePointList } from '../../api/knowledgePoint'
 import { ArrowLeft } from '@element-plus/icons-vue'
 
@@ -268,6 +280,10 @@ const groupList = ref([])
 const knowledgePointList = ref([])
 const selectedKnowledgePoint = ref(null)
 const selectedType = ref(null)
+// 题库分页：不再一次性拉取全部题目
+const questionPageNum = ref(1)
+const questionPageSize = ref(10)
+const questionTotal = ref(0)
 
 const typeOptions = [
   { value: 0, label: '单选题' },
@@ -320,27 +336,33 @@ const getKnowledgePointName = (id) => {
   return kp ? kp.name : ''
 }
 
-// 过滤后的可用题目
+// 知识点与题型筛选、已选题目剔除均已下推到后端，此处只补一次前端过滤
+// （防止刚添加题目、列表尚未刷新时重复显示）
 const filteredAvailableQuestions = computed(() => {
   const selectedIds = selectedQuestions.value.map(q => q.id)
-  let list = questionList.value.filter(q => !selectedIds.includes(q.id))
-  
-  if (selectedKnowledgePoint.value) {
-    list = list.filter(q => q.knowledgePointId === selectedKnowledgePoint.value)
-  }
-  
-  if (selectedType.value !== null && selectedType.value !== undefined) {
-    list = list.filter(q => q.type === selectedType.value)
-  }
-  
-  return list.map(q => ({
-    ...q,
-    knowledgePointName: getKnowledgePointName(q.knowledgePointId)
-  }))
+  return questionList.value
+    .filter(q => !selectedIds.includes(q.id))
+    .map(q => ({
+      ...q,
+      knowledgePointName: getKnowledgePointName(q.knowledgePointId)
+    }))
 })
 
-const filterQuestions = () => {
-  // 筛选逻辑在 computed 中处理
+// 筛选条件变化：重置到第一页重新请求，避免停留在已不存在的页码
+const onQuestionFilterChange = () => {
+  questionPageNum.value = 1
+  loadQuestions()
+}
+
+const handleQuestionPageChange = (page) => {
+  questionPageNum.value = page
+  loadQuestions()
+}
+
+const handleQuestionSizeChange = (size) => {
+  questionPageSize.value = size
+  questionPageNum.value = 1
+  loadQuestions()
 }
 
 const selectedTotalScore = computed(() => {
@@ -379,11 +401,12 @@ const goBack = () => {
   router.push('/teacher/exam')
 }
 
+// 下拉框需要枚举全部用户组
 const loadGroups = async () => {
   try {
-    const res = await getGroupList()
+    const res = await getAllGroups()
     if (res.code === 200) {
-      groupList.value = res.data.records || []
+      groupList.value = res.data || []
     }
   } catch (error) {
     console.error('加载用户组列表失败', error)
@@ -401,12 +424,27 @@ const loadKnowledgePoints = async () => {
   }
 }
 
+// 题库分页拉取：筛选条件与"排除本卷已选题目"都交给后端，保证每页条数准确
 const loadQuestions = async () => {
   try {
-    // 不分页获取所有题目，方便添加
-    const res = await getQuestionList({ pageNum: 1, pageSize: 1000 })
+    const params = {
+      pageNum: questionPageNum.value,
+      pageSize: questionPageSize.value
+    }
+    if (selectedKnowledgePoint.value) {
+      params.knowledgePointId = selectedKnowledgePoint.value
+    }
+    if (selectedType.value !== null && selectedType.value !== undefined) {
+      params.type = selectedType.value
+    }
+    // 编辑态传入试卷id，后端用 NOT EXISTS 剔除已选题目
+    if (examId.value) {
+      params.excludeExamId = examId.value
+    }
+    const res = await getQuestionList(params)
     if (res.code === 200) {
       questionList.value = res.data?.records || []
+      questionTotal.value = res.data?.total || 0
     }
   } catch (error) {
     ElMessage.error('加载题库失败')
@@ -510,8 +548,8 @@ const handleAddQuestion = async (question) => {
   try {
     const res = await addQuestionToExam(examId.value, {
       questionId: question.id,
-      score: perScore,
-      sortOrder: selectedQuestions.value.length
+      // sort_order 由服务端按「当前最大序号+1」计算，前端不传，避免删题后序号撞号
+      score: perScore
     })
 
     if (res.code === 200) {
@@ -521,9 +559,14 @@ const handleAddQuestion = async (question) => {
         examScore: perScore
       })
       ElMessage.success('添加成功')
+      // 后端已按 excludeExamId 剔除该题，重拉当前页保持列表同步
+      await loadQuestions()
     }
   } catch (error) {
-    ElMessage.error('添加失败')
+    // 后端拒绝原因（如"已有学生开始作答"）已由 axios 响应拦截器统一弹出，这里只兜底网络异常
+    if (!error?.response) {
+      ElMessage.error('添加失败，请检查网络')
+    }
   }
 }
 
@@ -538,8 +581,9 @@ const getDefaultPerScore = (type) => {
 }
 
 const autoAssignScores = async () => {
-  for (const question of selectedQuestions.value) {
-    let count, total
+  try {
+    for (const question of selectedQuestions.value) {
+      let count, total
     if (question.type === 0) {
       count = typeCount.value.single
       total = typeConfig.value.single.total
@@ -559,11 +603,17 @@ const autoAssignScores = async () => {
       continue
     }
 
-    const perScore = count > 0 ? Math.floor(total / count) : 0
-    question.examScore = perScore
-    await updateQuestionScoreFn(question)
+      const perScore = count > 0 ? Math.floor(total / count) : 0
+      question.examScore = perScore
+      await updateQuestionScoreFn(question)
+    }
+    ElMessage.success('分数已自动分配')
+  } catch (error) {
+    // 后端拒绝原因已由拦截器弹出；这里中断整批并兜底网络异常，避免每题重复弹窗
+    if (!error?.response) {
+      ElMessage.error('分配失败，请检查网络')
+    }
   }
-  ElMessage.success('分数已自动分配')
 }
 
 const updateQuestionScoreFn = async (question) => {
@@ -573,7 +623,8 @@ const updateQuestionScoreFn = async (question) => {
       score: question.examScore
     })
   } catch (error) {
-    ElMessage.error('更新分值失败')
+    // 向上抛出，让批量操作在第一次失败时中断，而不是继续刷 N 条相同提示
+    throw error
   }
 }
 
@@ -593,7 +644,10 @@ const batchSaveScores = async () => {
     }
     ElMessage.success('全部题目分数保存成功')
   } catch (error) {
-    ElMessage.error('保存失败，请重试')
+    // 后端拒绝原因已由拦截器弹出，这里只兜底网络异常
+    if (!error?.response) {
+      ElMessage.error('保存失败，请检查网络')
+    }
   } finally {
     savingAll.value = false
   }
@@ -604,8 +658,13 @@ const removeQuestion = async (question) => {
     await removeQuestionFromExam(examId.value, question.id)
     selectedQuestions.value = selectedQuestions.value.filter(q => q.id !== question.id)
     ElMessage.success('移除成功')
+    // 该题重新回到可选列表，重拉当前页
+    await loadQuestions()
   } catch (error) {
-    ElMessage.error('移除失败')
+    // 后端拒绝原因已由拦截器弹出，这里只兜底网络异常
+    if (!error?.response) {
+      ElMessage.error('移除失败，请检查网络')
+    }
   }
 }
 
@@ -940,5 +999,12 @@ onMounted(async () => {
 /* Row click cursor for question bank */
 :deep(.el-table__body-wrapper .el-table__body tr) {
   cursor: pointer;
+}
+
+/* Question bank pagination */
+.bank-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 0 4px;
 }
 </style>

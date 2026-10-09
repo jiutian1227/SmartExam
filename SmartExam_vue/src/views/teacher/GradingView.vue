@@ -69,11 +69,15 @@
             <div class="answer-section">
               <div class="answer-item student-answer">
                 <span class="label">学生答案：</span>
-                <span class="value">{{ item.userAnswer || '未作答' }}</span>
+                <span :class="['value', item.userAnswer ? '' : 'unanswered']">{{ item.userAnswer || '未作答' }}</span>
               </div>
               <div class="answer-item correct-answer" v-if="item.answer">
                 <span class="label">正确答案：</span>
                 <span class="value">{{ item.answer }}</span>
+              </div>
+              <div class="answer-item correct-answer" v-else>
+                <span class="label">正确答案：</span>
+                <span class="value missing-answer">该题未设置标准答案，需人工判分</span>
               </div>
               <div class="score-row">
                 <div class="score-input">
@@ -211,7 +215,7 @@
             <div 
               v-for="(result, idx) in aiGradingResults" 
               :key="idx" 
-              :class="['result-item', result.accepted ? 'accepted' : 'pending', { expanded: expandedResult === idx }]"
+              :class="['result-item', (result.accepted && !result.needsReview) ? 'accepted' : 'pending', { expanded: expandedResult === idx }]"
             >
               <div class="result-header">
                 <el-checkbox 
@@ -233,7 +237,7 @@
                   </div>
                 </div>
                 <div class="result-status">
-                  <el-icon v-if="result.accepted" color="#22c55e" :size="18"><CircleCheckFilled /></el-icon>
+                  <el-icon v-if="result.accepted && !result.needsReview" color="#22c55e" :size="18"><CircleCheckFilled /></el-icon>
                   <el-icon v-else color="#f59e0b" :size="18"><WarningFilled /></el-icon>
                 </div>
                 <div class="expand-icon" @click.stop="toggleResultExpand(idx)">
@@ -357,7 +361,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElDrawer } from 'element-plus'
 import { Loading, ArrowLeft, ArrowRight, MagicStick, ChatDotSquare, Check, WarningFilled, Lightning, CircleCheckFilled } from '@element-plus/icons-vue'
-import { getExamStats, getExamRecords, getRecordAnswers, submitRecordScores, autoGradeObjectiveQuestions, aiGradeSubjective } from '../../api/record'
+import { getExamStats, getRecordById, getRecordAnswers, submitRecordScores, autoGradeObjectiveQuestions, aiGradeSubjective } from '../../api/record'
 
 const router = useRouter()
 const route = useRoute()
@@ -478,15 +482,12 @@ const loadRecordAnswers = async () => {
   }
 }
 
+// 只取当前这一条记录
 const loadRecordInfo = async () => {
   try {
-    const res = await getExamRecords(examId.value, {
-      pageNum: 1,
-      pageSize: 1000
-    })
+    const res = await getRecordById(recordId.value)
     if (res.code === 200) {
-      const records = res.data.records || []
-      currentRecord.value = records.find(r => r.id === recordId.value) || {}
+      currentRecord.value = res.data || {}
     }
   } catch (error) {
     console.error('加载记录信息失败', error)
@@ -495,32 +496,6 @@ const loadRecordInfo = async () => {
 
 const calculateTotalScore = () => {
   return answerList.value.reduce((sum, item) => sum + (item.givenScore || 0), 0)
-}
-
-const autoGrade = async () => {
-  try {
-    const res = await autoGradeObjectiveQuestions(recordId.value)
-    if (res.code === 200) {
-      const scoreList = res.data || []
-      answerList.value = answerList.value.map(item => {
-        const scoreItem = scoreList.find(s => s.id === item.id)
-        if (scoreItem) {
-          return {
-            ...item,
-            givenScore: scoreItem.score,
-            comment: scoreItem.comment || ''
-          }
-        }
-        return item
-      })
-      ElMessage.success('客观题判卷完成！')
-    } else {
-      ElMessage.error(res.message || '自动判卷失败')
-    }
-  } catch (error) {
-    console.error('自动判卷失败', error)
-    ElMessage.error('自动判卷失败')
-  }
 }
 
 const submitGrades = async () => {
@@ -544,7 +519,6 @@ const submitGrades = async () => {
   }
 }
 
-// 修改函数名，避免和导入的aiGradeSubjective冲突
 const singleAiGrade = async (item) => {
   if (!item.userAnswer) {
     ElMessage.warning('学生未作答，无法AI批改')
@@ -639,32 +613,121 @@ const startAiBatchGrade = async () => {
     percentage: 0
   }
 
+  // 客观题判分
+  let objectiveMap = null
+
   for (let i = 0; i < allQuestions.length; i++) {
     const question = allQuestions[i]
     currentAiQuestion.value = question
     aiGradingProgress.value.current = i + 1
     aiGradingProgress.value.percentage = Math.round(((i + 1) / allQuestions.length) * 100)
 
-    if (question.type === 0 || question.type === 1 || question.type === 2) {
-      const userAnswer = (question.userAnswer || '').toString().trim().toUpperCase()
-      const correctAnswer = (question.answer || '').toString().trim().toUpperCase()
-      const isCorrect = userAnswer === correctAnswer
-      const score = isCorrect ? question.examScore : 0
-      
-      const result = {
-        ...question,
-        score: score,
-        comment: isCorrect ? '回答正确' : `回答错误，正确答案：${question.answer}`,
-        accepted: true,
-        selected: true,
-        isAuto: true
+    // 主观题判断是不是写了，客观题由后端一次性判分，主观题才走AI模型
+    if (question.type === 3 || question.type === 4) {
+      const rawAnswer = question.userAnswer
+      const hasAnswer = rawAnswer !== null && rawAnswer !== undefined && String(rawAnswer).trim() !== ''
+      if (!hasAnswer) { //标黄提醒教师过一眼
+        aiGradingResults.value.push({
+          ...question,
+          score: 0,
+          comment: '学生未作答',
+          accepted: true,
+          selected: true,
+          isAuto: true,
+          needsReview: true
+        })
+        aiGradingProgress.value.warning++
+        continue
       }
-      aiGradingResults.value.push(result)
-      aiGradingProgress.value.correct++
-      
-      await new Promise(resolve => setTimeout(resolve, 300))
-    } else {
-      try {
+    }
+
+    // 客观题（单选 / 多选 / 判断）：向服务端取一次结果
+    if (question.type === 0 || question.type === 1 || question.type === 2) {
+      if (objectiveMap === null) {
+        objectiveMap = {}
+        try {
+          const gradeRes = await autoGradeObjectiveQuestions(recordId.value)
+          if (gradeRes.code === 200 && Array.isArray(gradeRes.data)) {
+            gradeRes.data.forEach(item => {
+              if (item.isObjective) {
+                objectiveMap[item.id] = item
+              }
+            })
+          }
+        } catch (error) {
+          console.error('客观题自动判分失败', error)
+          ElMessage.warning('客观题自动判分失败，将按 0 分处理')
+        }
+      }
+
+      const graded = objectiveMap[question.id]
+      if (graded) {
+        // 学生未作答
+        if (graded.notAnswered) {
+          aiGradingResults.value.push({
+            ...question,
+            score: 0,
+            comment: '学生未作答',
+            accepted: true,
+            selected: true,
+            isAuto: true,
+            needsReview: true
+          })
+          aiGradingProgress.value.warning++
+          continue
+        }
+
+        // 客观题但题库没录标准答案：规则判不了，交给教师人工判
+        if (graded.missingAnswer) {
+          aiGradingResults.value.push({
+            ...question,
+            score: 0,
+            comment: '该题缺少标准答案，请人工复核',
+            accepted: false,
+            selected: false,
+            isAuto: true
+          })
+          aiGradingProgress.value.warning++
+          continue
+        }
+
+        let comment
+        if (graded.isCorrect) {
+          comment = '回答正确'
+        } else if (graded.score > 0) {
+          comment = `部分正确，得 ${graded.score} 分；正确答案：${question.answer}`
+        } else {
+          comment = `回答错误，正确答案：${question.answer}`
+        }
+        aiGradingResults.value.push({
+          ...question,
+          score: graded.score,
+          comment: comment,
+          accepted: true,
+          selected: true,
+          isAuto: true
+        })
+        aiGradingProgress.value.correct++
+
+        await new Promise(resolve => setTimeout(resolve, 300))
+        continue
+      }
+
+      // 走到这里说明没拿到服务端判分结果（请求失败）：标记需人工复核
+      aiGradingResults.value.push({
+        ...question,
+        score: 0,
+        comment: '自动判分失败，请人工复核',
+        accepted: false,
+        selected: false,
+        isAuto: true
+      })
+      aiGradingProgress.value.warning++
+      continue
+    }
+
+    // 主观题（填空 / 简答）：交给本地模型分析
+    try {
         const res = await aiGradeSubjective({
           questionContent: question.content,
           correctAnswer: question.answer,
@@ -705,7 +768,6 @@ const startAiBatchGrade = async () => {
         isAuto: false
       })
       aiGradingProgress.value.warning++
-    }
     }
   }
 
@@ -926,6 +988,18 @@ onMounted(async () => {
   border-radius: var(--radius-sm);
 }
 .answer-item.student-answer .value { background: var(--color-primary-50); }
+/* 开考时为每题预建了空答题行，未作答的题也会出现在列表里，这里给它一个醒目标记 */
+.answer-item.student-answer .value.unanswered {
+  background: var(--color-danger-50);
+  color: var(--color-danger-600);
+  font-weight: var(--font-weight-medium);
+}
+/* 题库漏录标准答案时提示教师，避免误以为学生答错 */
+.correct-answer .value.missing-answer {
+  background: var(--color-danger-50);
+  color: var(--color-danger-600);
+  font-weight: var(--font-weight-medium);
+}
 .correct-answer .value { color: var(--color-success); background: var(--color-secondary-50); font-weight: var(--font-weight-medium); }
 
 .score-row { display: flex; margin-bottom: var(--space-4); }
@@ -941,7 +1015,6 @@ onMounted(async () => {
 .submit-card { position: sticky; top: var(--space-6); }
 .submit-header { margin-bottom: var(--space-5); }
 
-.auto-grade-btn { width: 100%; height: 44px; font-size: var(--font-size-sm); margin-bottom: var(--space-4); }
 
 .final-score { text-align: center; padding: var(--space-6) 0; margin-bottom: var(--space-5); }
 .final-score .label { display: block; font-size: var(--font-size-sm); color: var(--color-text-tertiary); margin-bottom: var(--space-3); }

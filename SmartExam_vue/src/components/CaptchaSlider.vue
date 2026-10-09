@@ -351,13 +351,8 @@ watch(() => props.visible, (val) => {
   if (val) {
     loadCaptcha()
   }
-})
+}, {immediate:true})
 
-onMounted(() => {
-  if (props.visible) {
-    loadCaptcha()
-  }
-})
 
 onUnmounted(() => {
   document.removeEventListener('mousemove', onDrag)
